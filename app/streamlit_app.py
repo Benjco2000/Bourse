@@ -18,6 +18,9 @@ st.set_page_config(page_title="Bourse — analyse à la Graham", page_icon=":mat
 pages = {
     "Analyse": [
         st.Page("views/overview.py", title="Vue globale", icon=":material/dashboard:", default=True),
+        st.Page("views/valuation.py", title="Historique de valorisation", icon=":material/show_chart:",
+                url_path="valorisation"),
+        st.Page("views/cash.py", title="Cash & actionnaires", icon=":material/payments:", url_path="cash"),
     ],
     "Bonus": [
         st.Page("views/home.py", title="Marché", icon=":material/public:", url_path="marche"),

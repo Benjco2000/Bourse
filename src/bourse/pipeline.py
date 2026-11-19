@@ -22,6 +22,7 @@ from .transform.gold import build_gold
 from .transform.kpis import build_kpis
 from .transform.silver import build_silver
 from .transform.snapshot import build_snapshot
+from .transform.valuation_history import build_valuation_history
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +65,7 @@ def run_pipeline(settings: Settings, store: Store, client: SupportsGet | None = 
             summary["gold"] = build_gold(settings, store)
             summary["gold"]["kpis"] = build_kpis(settings, store)
             summary["gold"]["company_snapshot"] = len(build_snapshot(settings, store))
+            summary["gold"]["valuation_history"] = len(build_valuation_history(store))
             llm = llm if llm is not None else (None if demo else make_llm(settings.section("llm")))
             summary["gold"]["business_summaries"] = build_business_summaries(store, llm)
         if "quality" in steps:

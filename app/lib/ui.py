@@ -119,21 +119,69 @@ def format_threshold(threshold: float, direction: str, unit: str) -> str:
     return f"{sign} {fmt.num(threshold, 0)} ans"
 
 
-def kpi_card(row) -> None:
+def _parse_history(history) -> list[tuple[int, float]]:
+    return [(int(y), float(v)) for y, v in (p.split(":") for p in str(history or "").split(";") if p)]
+
+
+@st.dialog("Historique détaillé", width="large")
+def kpi_dialog(row, currency: str = "") -> None:
+    import pandas as pd
+
+    from . import charts, fmt
+
+    label_hist, percent = SPARK_LABELS.get(row.kpi_id, ("Historique", True))
+    hist = _parse_history(row.history)
+    color, icon, status_label = KPI_STATUS.get(row.status, KPI_STATUS["na"])
+    st.markdown(f"### {row.label} : :{color}[{format_kpi(row.value, row.unit, row.kpi_id)}]")
+    st.markdown(f":{color}-badge[{icon} {status_label}] · Seuil : "
+                f"{format_threshold(row.threshold, row.direction, row.unit)} · {row.period_label}")
+    st.caption(row.explanation)
+    if isinstance(row.note, str) and row.note:
+        st.caption(f"ⓘ {row.note}")
+    if len(hist) < 2:
+        st.info("Pas assez d'historique annuel pour tracer une courbe.")
+        return
+    st.markdown(f"**{label_hist}, exercices {hist[0][0]}–{hist[-1][0]}** — survolez un point pour voir la "
+                "variation par rapport à l'exercice précédent.")
+    st.plotly_chart(charts.kpi_history(hist, percent, label_hist, currency), width="stretch",
+                    config={"displayModeBar": False})
+    rows = []
+    for i, (y, v) in enumerate(hist):
+        prev = hist[i - 1][1] if i else None
+        if prev is None:
+            change = "—"
+        elif percent:
+            change = f"{fmt.num((v - prev) * 100, 1)} pt"
+        elif prev > 0 and v > 0:
+            change = fmt.pct(v / prev - 1, 1, signed=True)
+        else:
+            change = "n.s."
+        rows.append({"Exercice": str(y), label_hist: fmt.pct(v, 1) if percent else fmt.compact(v, 2),
+                     "Variation sur 1 an": change})
+    st.dataframe(pd.DataFrame(rows[::-1]), hide_index=True, width="stretch")
+    if percent:
+        st.caption("Pour un ratio en %, la variation est exprimée en points de pourcentage.")
+
+
+def kpi_card(row, currency: str = "") -> None:
     """Carte KPI : valeur, statut (couleur + icône + libellé), seuil, période, explication, mini-courbe."""
     from . import charts
 
     color, icon, label = KPI_STATUS.get(row.status, KPI_STATUS["na"])
     with st.container(border=True):
-        st.markdown(f"**{row.label}**", help=row.explanation)
+        head, btn = st.columns([5, 1], vertical_alignment="center")
+        head.markdown(f"**{row.label}**", help=row.explanation)
+        if btn.button("", icon=":material/open_in_full:", key=f"open_{row.ticker}_{row.kpi_id}",
+                      help="Agrandir le graphique", type="tertiary"):
+            kpi_dialog(row, currency)
         st.markdown(f"### :{color}[{format_kpi(row.value, row.unit, row.kpi_id)}]")
         st.markdown(f":{color}-badge[{icon} {label}]")
         st.caption(f"Seuil : {format_threshold(row.threshold, row.direction, row.unit)} · {row.period_label}")
         if isinstance(row.note, str) and row.note:
             st.caption(f"ⓘ {row.note}")
-        hist = [(int(y), float(v)) for y, v in (p.split(":") for p in str(row.history or "").split(";") if p)][-10:]
+        hist = _parse_history(row.history)[-10:]
         if len(hist) >= 2:
             label_hist, percent = SPARK_LABELS.get(row.kpi_id, ("Historique", True))
             st.plotly_chart(charts.sparkline(hist, percent=percent), width="stretch",
                             config={"displayModeBar": False}, key=f"spark_{row.ticker}_{row.kpi_id}")
-            st.caption(f"{label_hist}, {hist[0][0]}–{hist[-1][0]}")
+            st.caption(f"{label_hist}, {hist[0][0]}–{hist[-1][0]} · ⤢ pour agrandir")

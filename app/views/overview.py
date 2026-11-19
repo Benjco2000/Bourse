@@ -105,7 +105,7 @@ else:
         cols = st.columns(4)
         for col, r in zip(cols, chunk.itertuples(), strict=False):
             with col:
-                ui.kpi_card(r)
+                ui.kpi_card(r, reported_ccy)
     st.caption("Vert : seuil favorable atteint · Rouge : non atteint · Orange : historique insuffisant, valeur non "
                "interprétable ou donnée douteuse · Gris : indisponible. Seuils modifiables dans "
                "`config/settings.yaml` (section `kpis`).")

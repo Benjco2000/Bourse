@@ -153,3 +153,106 @@ def segment_bars(df: pd.DataFrame, title: str, currency: str = "") -> go.Figure:
     fig.update_xaxes(visible=False, range=[0, d["revenue"].max() * 1.15])
     fig.update_yaxes(showgrid=False)
     return fig
+
+
+def kpi_history(points: list[tuple[int, float]], percent: bool, label: str, currency: str = "") -> go.Figure:
+    """Historique annuel agrandi. Survol : valeur + variation par rapport à l'année précédente
+    (en % pour les montants, en points pour les ratios exprimés en %)."""
+    xs = [str(x) for x, _ in points]
+    ys = [y for _, y in points]
+    changes = []
+    for i, (_, y) in enumerate(points):
+        prev = points[i - 1][1] if i else None
+        if prev is None:
+            changes.append("—")
+        elif percent:
+            changes.append(f"{(y - prev) * 100:+.1f} pt".replace(".", ","))
+        elif prev > 0 and y > 0:
+            changes.append(f"{(y / prev - 1) * 100:+.1f} %".replace(".", ","))
+        else:
+            changes.append("n.s. (valeur ≤ 0)")
+    from . import fmt
+
+    values = [fmt.pct(y, 1) if percent else f"{fmt.compact(y, 2)} {currency}".strip() for y in ys]
+    fig = go.Figure(go.Scatter(
+        x=xs, y=ys, mode="lines+markers", name=label, line=dict(color=SERIES[0], width=2),
+        marker=dict(size=9), customdata=list(zip(values, changes, strict=True)),
+        hovertemplate="<b>%{x}</b><br>" + label + " : %{customdata[0]}<br>Variation sur 1 an : %{customdata[1]}"
+                      "<extra></extra>"))
+    fig = _layout(fig, height=380, showlegend=False, hovermode="closest")
+    if percent:
+        fig.update_yaxes(tickformat=".0%")
+    else:
+        fig.update_yaxes(tickformat=",.2s")
+    if any(y < 0 for y in ys):
+        fig.add_hline(y=0, line=dict(color=MUTED, width=1))
+    return fig
+
+
+def multiple_history(df: pd.DataFrame, col: str, label: str) -> go.Figure:
+    """Multiple dans le temps + médiane (référence) et bande interquartile de la période affichée.
+    Les périodes non calculables restent des trous (pas d'interpolation)."""
+    s = df[col]
+    valid = s.dropna()
+    fig = go.Figure()
+    if len(valid) >= 5:
+        q1, med, q3 = valid.quantile([0.25, 0.5, 0.75])
+        x = [df["date"].min(), df["date"].max()]
+        fig.add_trace(go.Scatter(x=x, y=[q3, q3], mode="lines", line=dict(width=0), hoverinfo="skip",
+                                 showlegend=False))
+        fig.add_trace(go.Scatter(x=x, y=[q1, q1], mode="lines", line=dict(width=0), fill="tonexty",
+                                 fillcolor="rgba(42,120,214,0.10)", name=f"Q1–Q3 ({q1:.1f}–{q3:.1f})",
+                                 hoverinfo="skip"))
+        fig.add_trace(go.Scatter(x=x, y=[med, med], mode="lines", name=f"Médiane ({med:.1f})",
+                                 line=dict(color=SERIES[1], width=2, dash="dash"), hoverinfo="skip"))
+    ttm_end = df["ttm_period_end"].dt.strftime("%m/%Y").fillna("—")
+    fig.add_trace(go.Scatter(
+        x=df["date"], y=s, mode="lines", name=label, line=dict(color=SERIES[0], width=2), connectgaps=False,
+        customdata=ttm_end, hovertemplate="%{x|%d/%m/%Y} : <b>%{y:.1f} x</b><br>TTM clos fin %{customdata}"
+                                          "<extra></extra>"))
+    fig = _layout(fig, None, height=330, hovermode="closest",
+                  legend=dict(orientation="h", yanchor="top", y=-0.12, xanchor="left", x=0, title=None),
+                  margin=dict(l=8, r=8, t=26, b=8))
+    fig.update_yaxes(ticksuffix=" x", rangemode="tozero")
+    # Échelle robuste : les multiples extrêmes (dénominateur proche de zéro) ne doivent pas écraser la courbe
+    if len(valid) >= 5:
+        cap = q3 + 3 * (q3 - q1)
+        if valid.max() > cap * 1.05:
+            fig.update_yaxes(range=[0, cap])
+            fig.add_annotation(xref="paper", yref="paper", x=1, y=1, xanchor="right", yanchor="bottom",
+                               showarrow=False, font=dict(size=11, color=MUTED),
+                               text=f"{(valid > cap).sum()} point(s) > {cap:.0f} x hors échelle")
+    return fig
+
+
+def waterfall(steps, currency: str = "") -> go.Figure:
+    """Cascade : hausses en bleu, baisses en orange, totaux en gris foncé (couleur + signe + libellé)."""
+    from . import fmt
+
+    short = {"Flux de trésorerie d'exploitation (OCF)": "OCF", "Free cash flow (FCF)": "FCF",
+             "Dette : émission nette (+) / remboursement (−)": "Dette nette", "Acquisitions (nettes)": "Acquisitions",
+             "Variation nette de trésorerie": "Var. trésorerie", "Émissions d'actions": "Émissions d'actions"}
+    xs = [short.get(s.label, "Autres flux" if s.label.startswith("Autres") else s.label) for s in steps]
+    fig = go.Figure(go.Waterfall(
+        orientation="v", x=xs, y=[s.value for s in steps], customdata=[s.label for s in steps],
+        measure=["total" if s.kind == "total" else "relative" for s in steps],
+        text=[f"{'+' if s.value > 0 and s.kind != 'total' else ''}{fmt.compact(s.value, 1)}" for s in steps],
+        textposition="outside", cliponaxis=False,
+        increasing=dict(marker=dict(color=SERIES[0])), decreasing=dict(marker=dict(color=SERIES[1])),
+        totals=dict(marker=dict(color="#52514e")), connector=dict(line=dict(color=MUTED, width=1)),
+        hovertemplate="%{customdata} : %{y:,.4s} " + currency + "<extra></extra>"))
+    fig = _layout(fig, None, height=400, showlegend=False, hovermode="closest", margin=dict(l=8, r=8, t=30, b=8))
+    fig.update_yaxes(tickformat=",.2s")
+    return fig
+
+
+def grouped_bars(df: pd.DataFrame, x: str, series: dict[str, str], currency: str = "") -> go.Figure:
+    fig = go.Figure()
+    for i, (col, label) in enumerate(series.items()):
+        if col in df.columns and df[col].notna().any():
+            fig.add_trace(go.Bar(x=df[x].astype(str), y=df[col], name=label, marker=dict(color=SERIES[i]),
+                                 hovertemplate=label + " : %{y:,.4s} " + currency + "<extra></extra>"))
+    fig = _layout(fig, None, height=360, barmode="group", hovermode="x unified")
+    fig.update_yaxes(tickformat=",.2s")
+    fig.update_layout(bargap=0.25, bargroupgap=0.08)
+    return fig
