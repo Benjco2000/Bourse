@@ -25,7 +25,7 @@ PLAN_PRESETS: dict[str, dict[str, Any]] = {
         "excluded_datasets": {"stock_news", "general_news", "insider_trades", "sp500_constituents",
                               "income_statement_quarter", "balance_sheet_quarter", "cash_flow_quarter"},
     },
-    "starter": {"max_statements_limit": None, "excluded_datasets": set()},
+    "starter": {"max_statements_limit": None, "excluded_datasets": {"sp500_constituents"}},
     "premium": {"max_statements_limit": None, "excluded_datasets": set()},
 }
 

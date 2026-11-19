@@ -34,6 +34,7 @@ universe:
 api:
   # Votre plan FMP : basic (gratuit) | starter | premium
   # "basic" : 5 exercices max, pas de trimestriel, ni news/initiés/S&P 500 (évite des appels refusés)
+  # "starter" : tout sauf la liste du S&P 500 (endpoint refusé en Starter)
   plan: basic
   base_url: https://financialmodelingprep.com/stable
   # Quota du plan : Starter = 300/min, Premium = 750/min. Gardez une marge.
