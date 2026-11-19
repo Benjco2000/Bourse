@@ -3,7 +3,8 @@
 Arborescence sous `data_dir` :
 
     bronze/<dataset>/ingest_date=YYYY-MM-DD/<SYMBOL|_market>.json   (réponses brutes de l'API)
-    silver/<table>.parquet                                           (données nettoyées, typées, dédupliquées)
+    silver/<table>.parquet                                           (staging : schéma du fournisseur, typé, dédupliqué)
+    core/<table>.parquet                                             (modèle normalisé indépendant du fournisseur)
     gold/<table>.parquet                                             (indicateurs métier prêts pour l'app)
     ops/<table>.parquet                                              (état d'ingestion, runs, qualité)
 
@@ -24,7 +25,7 @@ from typing import Any
 
 import pandas as pd
 
-LAYERS = ("bronze", "silver", "gold", "ops")
+LAYERS = ("bronze", "silver", "core", "gold", "ops")
 
 
 def utcnow() -> datetime:

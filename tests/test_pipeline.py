@@ -179,3 +179,40 @@ def test_basic_plan_caps_history_and_excludes_datasets(settings, store):
     assert "news/stock" not in paths and "insider-trading/search" not in paths
     assert all(p.get("limit", 0) <= 5 for path, p in seen if path == "income-statement")
     assert all(p.get("period") != "quarter" for path, p in seen if path == "income-statement")
+
+
+def test_core_tables_and_point_in_time(demo_store):
+    st = demo_store.read("core", "financial_statements")
+    assert {"annual", "quarter"} == set(st["period_type"])
+    assert (st["available_date"] > st["period_end"]).all()
+    assert {"source", "retrieved_at", "reported_currency", "quality_flags", "unit"} <= set(st.columns)
+    # CAPEX en montant positif, FCF = OCF - CAPEX
+    assert (st["capex"].dropna() >= 0).all()
+    assert ((st["operating_cash_flow"] - st["capex"]) - st["free_cash_flow"]).abs().max() < 1e-3
+    ttm = demo_store.read("core", "ttm")
+    assert (ttm["available_date"] >= ttm["period_end"]).all()
+    assert (ttm["method"] == "sum_4_quarters").any()
+    mc = demo_store.read("core", "market_cap_daily")
+    assert (mc["market_cap"] > 0).all()
+    peers = demo_store.read("core", "peers")
+    assert set(peers.loc[peers["ticker"] == "MSFT", "peer"]) == {"AAPL", "GOOGL", "META"}
+    kpis = demo_store.read("gold", "kpis")
+    assert kpis.groupby("ticker").size().eq(7).all()
+    assert set(kpis["status"]) <= {"good", "bad", "warning", "na"}
+
+
+def test_market_cap_approximation_when_fmp_unavailable(settings, store):
+    class NoMarketCap(FakeFMPClient):
+        def get(self, path, params=None):
+            if path == "historical-market-capitalization":
+                self.calls += 1
+                raise PlanRestrictedError("Restricted")
+            return super().get(path, params)
+
+    run_pipeline(settings, store, client=NoMarketCap(today=date(2026, 11, 19)), force=True)
+    mc = store.read("core", "market_cap_daily")
+    assert set(mc["source"]) == {"approx_close_x_diluted_shares"}
+    # point-in-time : aucune capitalisation avant la première publication d'un nombre d'actions
+    st = store.read("core", "financial_statements")
+    first_avail = st.groupby("ticker")["available_date"].min()
+    assert (mc.groupby("ticker")["date"].min() >= first_avail.reindex(mc["ticker"].unique())).all()

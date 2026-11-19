@@ -6,6 +6,7 @@ transformation incrémentale et idempotente. `full_refresh=True` reconstruit dep
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from datetime import datetime
@@ -58,7 +59,8 @@ def normalize(df: pd.DataFrame) -> pd.DataFrame:
             if all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in non_null):
                 df[col] = pd.to_numeric(df[col], errors="coerce")
             elif not all(isinstance(v, str) for v in non_null):
-                df[col] = df[col].map(lambda v: None if v is None else str(v))
+                df[col] = df[col].map(
+                    lambda v: None if v is None else (json.dumps(v) if isinstance(v, (dict, list)) else str(v)))
     return df
 
 
@@ -71,7 +73,7 @@ def envelopes_to_frame(ds: Dataset, envelopes: list[dict[str, Any]]) -> pd.DataF
         frame = pd.DataFrame(rows)
         if ds.scope == "symbol" and "symbol" not in frame.columns:
             frame["symbol"] = env["key"]
-        if ds.name == "stock_news":
+        if ds.scope == "symbol":
             frame["query_symbol"] = env["key"]
         frame["_fetched_at"] = env["fetched_at"]
         frames.append(frame)

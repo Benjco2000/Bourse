@@ -62,6 +62,27 @@ def run_quality_checks(settings: Settings, store: Store, run_id: str = "") -> pd
     add("Unicité des clés (silver)", "ok" if not dup_tables else "error",
         "aucun doublon" if not dup_tables else f"doublons dans : {', '.join(dup_tables)}")
 
+    # 5. Cohérence des états financiers (core) — signalée, jamais corrigée
+    st = store.read("core", "financial_statements")
+    if not st.empty and "quality_flags" in st.columns:
+        exploded = st.assign(flag=st["quality_flags"].str.split(",")).explode("flag")
+        exploded = exploded[exploded["flag"].fillna("") != ""]
+        serious = exploded[~exploded["flag"].isin(["availability_estimated", "cost_of_revenue_zero"])]
+        counts = serious.groupby("flag")["ticker"].nunique().to_dict()
+        add("Cohérence des états financiers", "ok" if not counts else "warn",
+            "aucune anomalie" if not counts else
+            " ; ".join(f"{k} ({v} société(s))" for k, v in sorted(counts.items())))
+        est = exploded[exploded["flag"] == "availability_estimated"]["ticker"].nunique()
+        if est:
+            add("Dates de publication", "warn", f"{est} société(s) sans date de dépôt : délai standard appliqué")
+
+    # 6. Capitalisation approximée
+    mc = store.read("core", "market_cap_daily")
+    if not mc.empty:
+        approx = mc[mc["source"] != "fmp_historical_market_cap"]["ticker"].unique().tolist()
+        add("Capitalisation historique", "ok" if not approx else "warn",
+            "source FMP" if not approx else f"approximée (cours × actions diluées) pour : {', '.join(approx)}")
+
     report = pd.DataFrame(rows)
     report["checked_at"] = pd.Timestamp.now()
     store.write("ops", "quality_report", report)

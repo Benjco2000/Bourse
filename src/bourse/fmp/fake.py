@@ -94,6 +94,9 @@ class FakeFMPClient:
             "most-actives": lambda s, p: self._movers(0), "news/general-latest": lambda s, p: self._general_news(),
             "earnings-calendar": lambda s, p: self._earnings(), "treasury-rates": lambda s, p: self._treasury(),
             "sp500-constituent": lambda s, p: [],
+            "historical-market-capitalization": self._market_cap, "stock-peers": self._peers,
+            "revenue-product-segmentation": lambda s, p: self._segments(s, p, "product"),
+            "revenue-geographic-segmentation": lambda s, p: self._segments(s, p, "geo"),
         }.get(path)
         if handler is None:
             return []
@@ -153,29 +156,45 @@ class FakeFMPClient:
                         "change": 0.0, "changePercent": 0.0, "vwap": close})
         return list(reversed(out))  # FMP renvoie du plus récent au plus ancien
 
+    def _quarter_ends(self, n: int) -> list[date]:
+        """n dernières fins de trimestre calendaire déjà publiées (> 45 jours), de la plus récente à la plus ancienne."""
+        d = self.today - timedelta(days=45)
+        q_month = ((d.month - 1) // 3) * 3 + 1
+        end = date(d.year, q_month, 1) - timedelta(days=1)
+        ends = []
+        for _ in range(n):
+            ends.append(end)
+            end = date(end.year, ((end.month - 1) // 3) * 3 + 1, 1) - timedelta(days=1)
+        return ends
+
     def _statement(self, sym: str, p: dict, build) -> list[dict]:
         period = p.get("period", "annual")
         limit = int(p.get("limit", 10))
         rows = []
         if period == "annual":
             for y in reversed(self._years(limit)):
-                rows.append(build(y, self._fundamentals(sym, y), "FY", date(y, 12, 31), 1.0))
+                end = date(y, 12, 31)
+                row = build(y, self._fundamentals(sym, y), "FY", end, 1.0)
+                filed = end + timedelta(days=60)
+                rows.append(row | {"filingDate": filed.isoformat(), "acceptedDate": f"{filed.isoformat()} 16:05:00"})
         else:
-            q_end = date(self.today.year, ((self.today.month - 1) // 3) * 3 + 1, 1) - timedelta(days=1)
-            for i in range(limit):
-                end = (date(q_end.year, q_end.month, 1) - timedelta(days=92 * i)).replace(day=28)
-                rows.append(build(end.year, self._fundamentals(sym, end.year), f"Q{(end.month - 1) // 3 + 1}",
-                                  end, 0.25))
+            for end in self._quarter_ends(limit):
+                noise = float(_rng("q", sym, end).uniform(0.9, 1.1))
+                row = build(end.year, self._fundamentals(sym, end.year), f"Q{(end.month - 1) // 3 + 1}", end,
+                            0.25 * noise)
+                filed = end + timedelta(days=30)
+                rows.append(row | {"filingDate": filed.isoformat(), "acceptedDate": f"{filed.isoformat()} 16:05:00"})
         return rows
 
     def _income(self, sym: str, p: dict) -> list[dict]:
         def build(y, f, period, d, k):
             return {"date": d.isoformat(), "symbol": sym, "reportedCurrency": "USD", "fiscalYear": str(y),
-                    "period": period, "revenue": f["revenue"] * k, "grossProfit": f["gross"] * k,
-                    "operatingIncome": f["opinc"] * k, "netIncome": f["net"] * k, "ebitda": f["opinc"] * 1.2 * k,
+                    "period": period, "revenue": f["revenue"] * k, "costOfRevenue": (f["revenue"] - f["gross"]) * k,
+                    "grossProfit": f["gross"] * k, "operatingIncome": f["opinc"] * k, "ebit": f["opinc"] * k,
+                    "netIncome": f["net"] * k, "ebitda": f["opinc"] * 1.2 * k,
                     "incomeBeforeTax": f["net"] * 1.2 * k, "incomeTaxExpense": f["tax"] * k,
                     "interestExpense": f["debt"] * 0.04 * k, "eps": f["net"] * k / f["shares"],
-                    "epsDiluted": f["net"] * k / f["shares"], "weightedAverageShsOut": f["shares"],
+                    "epsDiluted": f["net"] * k / f["shares"], "weightedAverageShsOut": f["shares"] * 0.99,
                     "weightedAverageShsOutDil": f["shares"]}
         return self._statement(sym, p, build)
 
@@ -183,10 +202,12 @@ class FakeFMPClient:
         def build(y, f, period, d, k):
             return {"date": d.isoformat(), "symbol": sym, "reportedCurrency": "USD", "fiscalYear": str(y),
                     "period": period, "totalAssets": f["assets"], "totalLiabilities": f["assets"] - f["equity"],
-                    "totalStockholdersEquity": f["equity"], "totalDebt": f["debt"], "longTermDebt": f["debt"] * 0.8,
-                    "cashAndCashEquivalents": f["cur_assets"] * 0.3,
+                    "totalStockholdersEquity": f["equity"], "totalEquity": f["equity"], "totalDebt": f["debt"],
+                    "shortTermDebt": f["debt"] * 0.2, "longTermDebt": f["debt"] * 0.8,
+                    "cashAndCashEquivalents": f["cur_assets"] * 0.3, "shortTermInvestments": f["cur_assets"] * 0.15,
                     "cashAndShortTermInvestments": f["cur_assets"] * 0.45,
-                    "totalCurrentAssets": f["cur_assets"], "totalCurrentLiabilities": f["cur_liab"]}
+                    "totalCurrentAssets": f["cur_assets"], "totalCurrentLiabilities": f["cur_liab"],
+                    "totalLiabilitiesAndTotalEquity": f["assets"]}
         return self._statement(sym, p, build)
 
     def _cashflow(self, sym: str, p: dict) -> list[dict]:
@@ -194,11 +215,41 @@ class FakeFMPClient:
 
         def build(y, f, period, d, k):
             div = -max(f["net"], 0) * c["payout"] * k if y >= c["div_since"] else 0.0
+            capex, ocf = f["capex"] * k, f["ocf"] * k
+            buyback = -f["net"] * 0.2 * k
+            acq = -f["revenue"] * 0.01 * k
+            debt = f["debt"] * 0.02 * k
+            change = ocf + capex + div + buyback + acq + debt
             return {"date": d.isoformat(), "symbol": sym, "reportedCurrency": "USD", "fiscalYear": str(y),
-                    "period": period, "operatingCashFlow": f["ocf"] * k, "capitalExpenditure": f["capex"] * k,
-                    "freeCashFlow": (f["ocf"] + f["capex"]) * k, "commonDividendsPaid": div,
-                    "commonStockRepurchased": -f["net"] * 0.2 * k, "stockBasedCompensation": f["revenue"] * 0.01 * k}
+                    "period": period, "netIncome": f["net"] * k, "operatingCashFlow": ocf,
+                    "netCashProvidedByOperatingActivities": ocf, "capitalExpenditure": capex,
+                    "investmentsInPropertyPlantAndEquipment": capex, "freeCashFlow": ocf + capex,
+                    "commonDividendsPaid": div, "netDividendsPaid": div, "commonStockRepurchased": buyback,
+                    "commonStockIssuance": f["revenue"] * 0.001 * k, "stockBasedCompensation": f["revenue"] * 0.01 * k,
+                    "acquisitionsNet": acq, "netDebtIssuance": debt, "netChangeInCash": change}
         return self._statement(sym, p, build)
+
+    def _market_cap(self, sym: str, p: dict) -> list[dict]:
+        f = self._fundamentals(sym, self.today.year - 1)
+        return [{"symbol": sym, "date": x["date"], "marketCap": x["close"] * f["shares"]}
+                for x in self._prices(sym, p)]
+
+    def _peers(self, sym: str, p: dict) -> list[dict]:
+        others = [s for s in ("MSFT", "AAPL", "GOOGL", "META", "KO", "PEP", "PG", "V", "MA", "AXP") if s != sym]
+        return [{"symbol": s, "companyName": f"{s} Demo Corp.", "price": self._price(s), "mktCap": 1e11}
+                for s in others[:5]]
+
+    def _segments(self, sym: str, p: dict, kind: str) -> list[dict]:
+        names = {"product": ["Produits", "Services", "Licences"], "geo": ["États-Unis", "Europe", "Asie-Pacifique"]}
+        rows = []
+        for y in reversed(self._years(5)):
+            rev = self._fundamentals(sym, y)["revenue"]
+            r = _rng("seg", sym, kind)
+            w = r.dirichlet([3, 2, 1])
+            rows.append({"symbol": sym, "fiscalYear": y, "period": "FY", "reportedCurrency": "USD",
+                         "date": date(y, 12, 31).isoformat(),
+                         "data": {n: float(rev * wi) for n, wi in zip(names[kind], w, strict=True)}})
+        return rows
 
     def _ratios(self, sym: str, p: dict) -> list[dict]:
         c = self._company(sym)

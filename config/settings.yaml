@@ -8,26 +8,25 @@ universe:
   # Plan gratuit (250 appels/jour) : le premier chargement de 20 tickers s'étale sur 2 jours
   # (le pipeline reprend automatiquement là où il s'est arrêté).
   tickers:
+    # MVP : 3 groupes de pairs (les concurrents affichés en page 1 sont dans l'univers)
+    # Technologie / plateformes
     - MSFT
     - AAPL
     - GOOGL
-    - AMZN
-    - NVDA
     - META
-    - BRK-B
-    - JNJ
+    # Biens de consommation de base
     - KO
-    - PG
-    - JPM
-    - V
-    - XOM
     - PEP
-    - WMT
-    - MCD
-    - INTC
-    - CSCO
-    - PFE
-    - T
+    - PG
+    # Paiements
+    - V
+    - MA
+    - AXP
+  # Groupes de pairs explicites (prioritaires sur l'endpoint "peers" de FMP). Modifiables librement.
+  peer_groups:
+    tech_platforms: [MSFT, AAPL, GOOGL, META]
+    consumer_staples: [KO, PEP, PG]
+    payments: [V, MA, AXP]
   # true = ajoute automatiquement les constituants du S&P 500 (≈ 500 tickers × ~20 appels).
   # Attention : nécessite un plan FMP payant (quota quotidien du plan gratuit ≈ 250 appels).
   include_sp500: false
@@ -84,3 +83,29 @@ graham:
   max_pe: 15
   max_pb: 1.5
   max_pe_x_pb: 22.5
+
+# --------------------------------------------------------------------------- KPIs fondamentaux (page 1)
+# Seuils indicatifs "favorables". direction: higher = plus haut est mieux, lower = plus bas est mieux.
+kpis:
+  revenue_cagr_5y:        {threshold: 0.10, direction: higher}
+  fcf_cagr_5y:            {threshold: 0.10, direction: higher}
+  share_change_5y:        {threshold: 0.0,  direction: lower}
+  roce_avg_5y:            {threshold: 0.15, direction: higher}
+  net_debt_to_fcf:        {threshold: 3.0,  direction: lower}
+  gross_margin_ttm:       {threshold: 0.15, direction: higher}
+  fcf_margin_ttm:         {threshold: 0.15, direction: higher}
+  lookback_years: 5
+  # En-dessous de ce nombre d'années d'historique, un KPI "5 ans" est marqué "historique insuffisant" (orange)
+  min_years_for_5y: 5
+  default_tax_rate: 0.21      # taux d'IS utilisé si le taux effectif n'est pas calculable (NOPAT)
+
+# Délai de publication supposé quand la date de dépôt n'est pas fournie par la source (anti look-ahead)
+availability_lag_days:
+  annual: 90
+  quarter: 45
+
+# Tranches de capitalisation (USD) pour la segmentation ML
+cap_buckets:
+  small: 2.0e9
+  mid: 10.0e9
+  large: 100.0e9

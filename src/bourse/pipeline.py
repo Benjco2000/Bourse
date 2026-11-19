@@ -11,16 +11,18 @@ from typing import Any
 import pandas as pd
 
 from .config import Settings
+from .core.normalize import build_core
 from .fmp.client import FMPClient
-from .ingestion import SupportsGet, run_ingestion
+from .ingestion import SupportsGet, resolve_universe, run_ingestion
 from .quality import run_quality_checks
 from .storage import Store, utcnow
 from .transform.gold import build_gold
+from .transform.kpis import build_kpis
 from .transform.silver import build_silver
 
 log = logging.getLogger(__name__)
 
-ALL_STEPS = ("ingest", "silver", "gold", "quality")
+ALL_STEPS = ("ingest", "silver", "core", "gold", "quality")
 
 
 def make_client(settings: Settings) -> FMPClient:
@@ -53,8 +55,11 @@ def run_pipeline(settings: Settings, store: Store, client: SupportsGet | None = 
                 status = "partial"
         if "silver" in steps:
             summary["silver"] = build_silver(store, datasets=datasets, full_refresh=full_refresh)
+        if "core" in steps:
+            summary["core"] = build_core(settings, store, resolve_universe(settings, store, tickers))
         if "gold" in steps:
             summary["gold"] = build_gold(settings, store)
+            summary["gold"]["kpis"] = build_kpis(settings, store)
         if "quality" in steps:
             qa = run_quality_checks(settings, store, run_id)
             summary["quality"] = qa["status"].value_counts().to_dict()

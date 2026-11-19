@@ -128,11 +128,13 @@ def run_ingestion(settings: Settings, store: Store, client: SupportsGet,
 
     # 2) Datasets par ticker
     universe = resolve_universe(settings, store, tickers)
-    last_price_date: dict[str, pd.Timestamp] = {}
-    if any(d.incremental for d in per_symbol) and not force:
-        prices = store.read("silver", "prices_daily", columns=["symbol", "date"])
-        if not prices.empty:
-            last_price_date = prices.groupby("symbol")["date"].max().to_dict()
+    last_dates: dict[str, dict[str, pd.Timestamp]] = {}
+    if not force:
+        for ds in per_symbol:
+            if ds.incremental and store.exists("silver", ds.name):
+                df = store.read("silver", ds.name, columns=["symbol", "date"])
+                if not df.empty:
+                    last_dates[ds.name] = df.groupby("symbol")["date"].max().to_dict()
 
     tasks = []
     for ds in per_symbol:
@@ -143,7 +145,7 @@ def run_ingestion(settings: Settings, store: Store, client: SupportsGet,
                 tasks.append((ds, sym))
     log.info("Ingestion : %d appels à effectuer (%d tickers, %d jeux de données), %d déjà frais",
              len(tasks), len(universe), len(per_symbol), summary.skipped_fresh)
-    _execute(tasks, settings, store, client, cfg, summary, state_rows, last_price_date)
+    _execute(tasks, settings, store, client, cfg, summary, state_rows, last_dates)
 
     # 3) Mise à jour de l'état
     if state_rows:
@@ -168,11 +170,11 @@ def run_ingestion(settings: Settings, store: Store, client: SupportsGet,
 
 def _execute(tasks: list[tuple[Dataset, str]], settings: Settings, store: Store, client: SupportsGet,
              cfg: dict[str, Any], summary: IngestionSummary, state_rows: list[dict[str, Any]],
-             last_price_date: dict[str, pd.Timestamp] | None = None) -> None:
+             last_dates: dict[str, dict[str, pd.Timestamp]] | None = None) -> None:
     if not tasks:
         return
     lock = threading.Lock()
-    last_price_date = last_price_date or {}
+    last_dates = last_dates or {}
 
     def work(ds: Dataset, key: str) -> None:
         with lock:
@@ -181,8 +183,9 @@ def _execute(tasks: list[tuple[Dataset, str]], settings: Settings, store: Store,
         params = dict(ds.params(cfg))
         if ds.scope == "symbol":
             params[ds.symbol_param] = key
-            if ds.incremental and key in last_price_date:
-                params["from"] = (pd.Timestamp(last_price_date[key]) - pd.Timedelta(days=7)).date().isoformat()
+            known = last_dates.get(ds.name, {})
+            if ds.incremental and key in known:
+                params["from"] = (pd.Timestamp(known[key]) - pd.Timedelta(days=7)).date().isoformat()
         fetched_at = utcnow()
         row: dict[str, Any] = {"dataset": ds.name, "key": key, "last_attempt_at": fetched_at,
                                "last_success_at": pd.NaT, "status": "ok", "error": None, "rows": 0}

@@ -43,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     common(p_ing)
     p_ing.add_argument("--force", action="store_true")
 
-    p_tr = sub.add_parser("transform", help="silver + gold + qualité (aucun appel API)")
+    p_tr = sub.add_parser("transform", help="silver + core + gold + qualité (aucun appel API)")
     p_tr.add_argument("--full-refresh", action="store_true")
 
     p_demo = sub.add_parser("demo", help="données synthétiques, sans clé API")
@@ -101,10 +101,10 @@ def main(argv: list[str] | None = None) -> int:
         result = run_pipeline(settings, store, tickers=args.tickers, datasets=args.datasets, force=args.force,
                               full_refresh=args.full_refresh)
     elif args.command == "ingest":
-        result = run_pipeline(settings, store, steps=("ingest", "silver"), tickers=args.tickers,
+        result = run_pipeline(settings, store, steps=("ingest", "silver", "core"), tickers=args.tickers,
                               datasets=args.datasets, force=args.force)
     else:  # transform
-        result = run_pipeline(settings, store, steps=("silver", "gold", "quality"),
+        result = run_pipeline(settings, store, steps=("silver", "core", "gold", "quality"),
                               full_refresh=args.full_refresh)
 
     if os.getenv("BOURSE_LOG_LEVEL", "INFO").upper() == "DEBUG":

@@ -29,11 +29,15 @@ résultats** et une page **Données & pipeline** (historique des runs, contrôle
                    │  rate limiter, retries, politique de fraîcheur, reprise sur quota
                    ▼
             ┌─────────────┐
-            │   silver    │──▶ silver/  tables Parquet nettoyées, typées, dédupliquées (upsert incrémental)
+            │   silver    │──▶ silver/  staging au schéma FMP : typé, dédupliqué (upsert incrémental)
             └─────────────┘
                    ▼
             ┌─────────────┐
-            │    gold     │──▶ gold/    valorisation, critères de Graham, notes, screener, fondamentaux
+            │    core     │──▶ core/    modèle normalisé indépendant du fournisseur, dates de publication,
+            └─────────────┘            TTM point-in-time, capitalisation quotidienne, segments, pairs
+                   ▼
+            ┌─────────────┐
+            │    gold     │──▶ gold/    7 KPIs fondamentaux, valorisation, critères de Graham, screener
             └─────────────┘
                    ▼
             ┌─────────────┐
@@ -52,6 +56,9 @@ résultats** et une page **Données & pipeline** (historique des runs, contrôle
 │   ├── fmp/fake.py             # faux client (données synthétiques) pour démo et tests
 │   ├── ingestion.py            # API -> bronze
 │   ├── transform/silver.py     # bronze -> silver
+│   ├── core/normalize.py       # silver -> core (seul module qui connaît les champs FMP)
+│   ├── financials/             # KPIs, dette nette, ROCE, multiples (fonctions pures testées)
+│   ├── transform/kpis.py       # core -> gold.kpis
 │   ├── transform/gold.py       # silver -> gold (valorisation, Graham, notes)
 │   ├── analytics/              # formules de valorisation et de notation (fonctions pures)
 │   ├── quality.py              # contrôles qualité
@@ -73,6 +80,12 @@ Choix principaux :
 - **Économie de quota** : chaque jeu de données a une fréquence (`daily` / `weekly`) ; les cours sont chargés en
   incrémental ; un endpoint hors de votre plan est détecté une fois puis ignoré ; si le quota journalier est
   atteint, le run s'arrête proprement et **reprend le lendemain là où il s'était arrêté**.
+
+Documentation détaillée : [`docs/PLAN.md`](docs/PLAN.md) (avancement par lots),
+[`docs/DECISIONS.md`](docs/DECISIONS.md) (choix techniques et conventions financières),
+[`docs/DATA_DICTIONARY.md`](docs/DATA_DICTIONARY.md) (tables et définitions).
+
+**Univers MVP** : 10 sociétés en 3 groupes de pairs — MSFT, AAPL, GOOGL, META / KO, PEP, PG / V, MA, AXP.
 
 ---
 
@@ -146,7 +159,8 @@ Le suivi d'un autre ticker se fait dans `config/settings.yaml` (`universe.ticker
 | Starter | 300 / min | 5 ans | Tout l'univers en quelques minutes. |
 | Premium | 750 / min | 30+ ans | Nécessaire pour évaluer pleinement les critères Graham sur 10 ans. |
 
-**Indiquez votre plan dans `config/settings.yaml` (`api.plan: basic | starter | premium`).** En `basic`, le
+**Indiquez votre plan dans `config/settings.yaml` (`api.plan: basic | starter | premium`)** — à passer à
+`starter` dès l'abonnement souscrit (débloque le trimestriel, donc le vrai TTM). En `basic`, le
 pipeline limite les états financiers à 5 exercices, saute le trimestriel, les news, les initiés et le S&P 500
 (non inclus dans le plan gratuit), et les tickers hors de la liste autorisée par FMP sont simplement ignorés
 (listés dans les logs et sur la page « Données & pipeline »).
