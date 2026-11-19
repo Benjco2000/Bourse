@@ -282,8 +282,9 @@ with tabs[6]:
 # ================================================================== Actualités
 with tabs[7]:
     news = data.for_symbol("silver", "stock_news", sym, symbol_col="query_symbol")
-    if news.empty:
-        st.caption("Aucune actualité.")
+    if news.empty or "published_date" not in news.columns:
+        st.caption("Aucune actualité (non incluse dans le plan FMP gratuit).")
+        news = news.iloc[0:0].assign(published_date=pd.NaT)
     for n in news.sort_values("published_date", ascending=False).head(20).itertuples():
         with st.container(border=True):
             st.markdown(f"**[{n.title}]({n.url})**")

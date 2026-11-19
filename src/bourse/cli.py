@@ -7,6 +7,7 @@
     bourse transform --full-refresh
     bourse demo                # pipeline complet avec des données SYNTHÉTIQUES (sans clé API) dans data_demo/
     bourse status              # état des derniers runs et de la qualité
+    bourse probe AAPL          # diagnostic : quels endpoints votre plan FMP autorise
     bourse datasets            # liste des jeux de données FMP ingérés
 """
 
@@ -49,6 +50,8 @@ def main(argv: list[str] | None = None) -> int:
     p_demo.add_argument("--data-dir", default=None, help="dossier cible (défaut : data_demo/)")
 
     sub.add_parser("status", help="derniers runs & contrôles qualité")
+    p_probe = sub.add_parser("probe", help="teste chaque endpoint FMP pour un ticker (diagnostic de plan)")
+    p_probe.add_argument("ticker", nargs="?", default="AAPL")
     sub.add_parser("datasets", help="liste des jeux de données")
 
     args = parser.parse_args(argv)
@@ -70,6 +73,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\nDonnées de démonstration écrites dans {data_dir}")
         print(f"Lancez l'app : BOURSE_DATA_DIR={data_dir} streamlit run app/streamlit_app.py")
         return 0 if result["status"] != "failed" else 1
+
+    if args.command == "probe":
+        return _probe(settings, args.ticker.upper())
 
     store = Store(settings.data_dir)
 
@@ -104,6 +110,33 @@ def main(argv: list[str] | None = None) -> int:
     if os.getenv("BOURSE_LOG_LEVEL", "INFO").upper() == "DEBUG":
         print(json.dumps(result, indent=2, default=str))
     return 0 if result["status"] != "failed" else 1
+
+
+def _probe(settings, ticker: str) -> int:
+    """Appelle une fois chaque endpoint et affiche le résultat (≈ 26 appels API)."""
+    from .fmp.client import FMPError, PlanRestrictedError
+    from .pipeline import make_client
+
+    if not settings.api_key:
+        print("Erreur : FMP_API_KEY introuvable.", file=sys.stderr)
+        return 2
+    client = make_client(settings)
+    cfg = settings.raw | {"history": settings.history}
+    print(f"Plan configuré : {settings.plan} — ticker testé : {ticker}\n")
+    for ds in DATASETS:
+        params = dict(ds.params(cfg))
+        if ds.scope == "symbol":
+            params[ds.symbol_param] = ticker
+        try:
+            payload = client.get(ds.path, params)
+            n = len(payload) if isinstance(payload, list) else 1
+            status = f"OK ({n} lignes)" if n else "OK (vide)"
+        except PlanRestrictedError as exc:
+            status = f"REFUSÉ — {str(exc)[:110]}"
+        except FMPError as exc:
+            status = f"ERREUR — {str(exc)[:110]}"
+        print(f"{ds.name:28s} {status}")
+    return 0
 
 
 if __name__ == "__main__":

@@ -18,6 +18,18 @@ load_dotenv(PROJECT_ROOT / ".env")
 load_dotenv()  # .env du répertoire courant, si différent
 
 
+# Contraintes connues par plan FMP (cf. https://site.financialmodelingprep.com/pricing-plans)
+PLAN_PRESETS: dict[str, dict[str, Any]] = {
+    "basic": {  # gratuit : 250 appels/jour, ~87 tickers US, 5 résultats max par état financier
+        "max_statements_limit": 5,
+        "excluded_datasets": {"stock_news", "general_news", "insider_trades", "sp500_constituents",
+                              "income_statement_quarter", "balance_sheet_quarter", "cash_flow_quarter"},
+    },
+    "starter": {"max_statements_limit": None, "excluded_datasets": set()},
+    "premium": {"max_statements_limit": None, "excluded_datasets": set()},
+}
+
+
 @dataclass
 class Settings:
     raw: dict[str, Any]
@@ -43,8 +55,22 @@ class Settings:
         return self.section("graham")
 
     @property
+    def plan(self) -> str:
+        return str(self.api.get("plan", "starter")).lower()
+
+    @property
+    def plan_preset(self) -> dict[str, Any]:
+        return PLAN_PRESETS.get(self.plan, PLAN_PRESETS["starter"])
+
+    @property
     def history(self) -> dict[str, Any]:
-        return self.section("history")
+        """Paramètres d'historique, bornés selon le plan FMP."""
+        hist = dict(self.section("history"))
+        cap = self.plan_preset.get("max_statements_limit")
+        if cap:
+            for key in ("annual_statements_limit", "quarterly_statements_limit"):
+                hist[key] = min(int(hist.get(key, cap)), cap)
+        return hist
 
     @property
     def refresh_hours(self) -> dict[str, Any]:

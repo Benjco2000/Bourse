@@ -132,6 +132,7 @@ Ouvrez http://localhost:8501.
 | `bourse transform [--full-refresh]` | recalcule silver/gold depuis le bronze, **sans appel API** |
 | `bourse status` | derniers runs + contrôles qualité |
 | `bourse datasets` | liste des endpoints FMP ingérés |
+| `bourse probe AAPL` | diagnostic : teste chaque endpoint pour un ticker et affiche ce que votre plan autorise (~26 appels) |
 | `make test` / `make lint` | tests / lint |
 
 Le suivi d'un autre ticker se fait dans `config/settings.yaml` (`universe.tickers`), puis `bourse run`.
@@ -144,6 +145,11 @@ Le suivi d'un autre ticker se fait dans `config/settings.yaml` (`universe.ticker
 | Basic (gratuit) | 250 / jour | 5 ans | ~19 appels/ticker au 1er chargement : 20 tickers = 2 jours. Certains endpoints sont absents (ils seront simplement ignorés et l'onglet correspondant affichera « indisponible »). |
 | Starter | 300 / min | 5 ans | Tout l'univers en quelques minutes. |
 | Premium | 750 / min | 30+ ans | Nécessaire pour évaluer pleinement les critères Graham sur 10 ans. |
+
+**Indiquez votre plan dans `config/settings.yaml` (`api.plan: basic | starter | premium`).** En `basic`, le
+pipeline limite les états financiers à 5 exercices, saute le trimestriel, les news, les initiés et le S&P 500
+(non inclus dans le plan gratuit), et les tickers hors de la liste autorisée par FMP sont simplement ignorés
+(listés dans les logs et sur la page « Données & pipeline »).
 
 Avec 5 ans d'historique, les critères « stabilité » et « croissance des bénéfices » sont marqués **◐ (historique
 partiel)**. Ajustez `api.requests_per_minute` dans `settings.yaml` selon votre plan.

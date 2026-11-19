@@ -67,12 +67,26 @@ def _by_symbol(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
 
 
 # --------------------------------------------------------------- fondamentaux annuels
+FUND_COLUMNS = [
+    "symbol", "date", "fiscal_year", "currency", "revenue", "gross_profit", "operating_income", "net_income",
+    "eps", "shares", "equity", "total_debt", "cash", "current_assets", "current_liabilities", "long_term_debt",
+    "free_cash_flow", "operating_cash_flow", "capex", "dividends_paid", "buybacks", "bvps", "fcf_per_share",
+    "gross_margin", "operating_margin", "net_margin", "fcf_margin", "roe", "roic", "current_ratio",
+    "debt_to_equity", "net_current_assets", "payout_ratio",
+]
+
+
+def empty_fundamentals() -> pd.DataFrame:
+    dtypes = {"symbol": "object", "currency": "object", "date": "datetime64[ns]", "fiscal_year": "int64"}
+    return pd.DataFrame({c: pd.Series(dtype=dtypes.get(c, "float64")) for c in FUND_COLUMNS})
+
+
 def build_fundamentals(store: Store) -> pd.DataFrame:
     inc = store.read("silver", "income_statement_annual")
     bal = store.read("silver", "balance_sheet_annual")
     cf = store.read("silver", "cash_flow_annual")
-    if inc.empty:
-        return pd.DataFrame()
+    if inc.empty or "symbol" not in inc.columns:
+        return empty_fundamentals()
 
     f = pd.DataFrame({
         "symbol": inc["symbol"],
@@ -223,12 +237,13 @@ def _analyst_growth(est: pd.DataFrame | None, eps_now: float | None) -> float | 
 def compute_symbol(sym: str, ctx: dict[str, Any], settings: Settings, aaa: float) -> dict[str, Any]:
     vcfg, gcfg = settings.valuation, settings.graham
     g = lambda name: ctx[name].get(sym, pd.DataFrame())  # noqa: E731
-    fund = g("fund").sort_values("fiscal_year")
+    fund = g("fund")
+    fund = empty_fundamentals() if fund.empty else fund.sort_values("fiscal_year")
     quote, profile = g("quote"), g("profile")
     last = fund.iloc[-1] if not fund.empty else pd.Series(dtype=float)
 
     price = fnum(first(quote, "price")) or fnum(first(profile, "price"))
-    if price is None and not g("prices").empty:
+    if price is None and not g("prices").empty and "close" in g("prices").columns:
         price = fnum(g("prices").sort_values("date")["close"].iloc[-1])
 
     inc_q, bal_q, cf_q = g("inc_q"), g("bal_q"), g("cf_q")
@@ -453,7 +468,7 @@ def build_gold(settings: Settings, store: Store) -> dict[str, int]:
                        for d, s in scores.items()]
         val_rows[-1].update({f"score_{d}": s for d, s in scores.items()})
 
-    valuation = pd.DataFrame(val_rows)
+    valuation = pd.DataFrame(val_rows) if val_rows else pd.DataFrame({"symbol": pd.Series(dtype=str)})
     criteria = pd.DataFrame(crit_rows)
     scores = pd.DataFrame(score_rows)
     store.write("gold", "valuation", valuation)
@@ -464,7 +479,7 @@ def build_gold(settings: Settings, store: Store) -> dict[str, int]:
     profile = read("silver", "profile")
     quote = read("silver", "quote")
     screener = valuation.copy()
-    if not profile.empty:
+    if not profile.empty and "symbol" in profile.columns:
         p = pd.DataFrame({
             "symbol": profile["symbol"],
             "name": col(profile, "company_name", default=None),
@@ -477,7 +492,7 @@ def build_gold(settings: Settings, store: Store) -> dict[str, int]:
             "image": col(profile, "image", default=None),
         })
         screener = screener.merge(p, on="symbol", how="left")
-    if not quote.empty:
+    if not quote.empty and "symbol" in quote.columns:
         q = pd.DataFrame({
             "symbol": quote["symbol"],
             "quote_name": col(quote, "name", default=None),
@@ -496,7 +511,7 @@ def build_gold(settings: Settings, store: Store) -> dict[str, int]:
 
     # ---------------- dividendes annuels (graphique)
     div = read("silver", "dividends")
-    if not div.empty:
+    if not div.empty and "date" in div.columns:
         d = div.assign(amount=col(div, "adj_dividend", "dividend"), year=div["date"].dt.year)
         store.write("gold", "dividends_annual",
                     d.groupby(["symbol", "year"], as_index=False)["amount"].sum()

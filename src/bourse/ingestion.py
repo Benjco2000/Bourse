@@ -40,6 +40,9 @@ class IngestionSummary:
     skipped_fresh: int = 0
     failed: int = 0
     restricted_datasets: set[str] = field(default_factory=set)
+    restricted_symbols: dict[str, list[str]] = field(default_factory=dict)
+    restriction_messages: dict[str, str] = field(default_factory=dict)
+    ok_by_dataset: dict[str, int] = field(default_factory=dict)
     quota_exceeded: bool = False
     errors: list[str] = field(default_factory=list)
     api_calls: int = 0
@@ -50,6 +53,7 @@ class IngestionSummary:
             "skipped_fresh": self.skipped_fresh,
             "failed": self.failed,
             "restricted_datasets": sorted(self.restricted_datasets),
+            "restricted_symbols": {k: sorted(v) for k, v in self.restricted_symbols.items()},
             "quota_exceeded": self.quota_exceeded,
             "errors": self.errors[:50],
             "api_calls": self.api_calls,
@@ -80,7 +84,11 @@ def run_ingestion(settings: Settings, store: Store, client: SupportsGet,
                   tickers: list[str] | None = None, datasets: list[str] | None = None,
                   force: bool = False) -> IngestionSummary:
     summary = IngestionSummary()
-    selected = [DATASETS_BY_NAME[d] for d in datasets] if datasets else list(DATASETS)
+    excluded = settings.plan_preset.get("excluded_datasets", set())
+    selected = [DATASETS_BY_NAME[d] for d in datasets] if datasets else \
+        [d for d in DATASETS if d.name not in excluded]
+    if excluded and not datasets:
+        log.info("Plan FMP '%s' : jeux de données non inclus ignorés : %s", settings.plan, ", ".join(sorted(excluded)))
     cfg = settings.raw | {"history": settings.history}
     refresh = settings.refresh_hours
     now = utcnow()
@@ -148,8 +156,13 @@ def run_ingestion(settings: Settings, store: Store, client: SupportsGet,
             new_state = merged.drop(columns=["last_success_at_prev"])
         store.upsert("ops", "ingestion_state", new_state, keys=["dataset", "key"])
 
+    for name, syms in summary.restricted_symbols.items():
+        if name not in summary.restricted_datasets:
+            log.warning("%s : tickers refusés par votre plan FMP : %s", name, ", ".join(sorted(syms)))
     summary.api_calls = getattr(client, "calls", 0)
-    log.info("Ingestion terminée : %s", {k: v for k, v in summary.as_dict().items() if k != "errors"})
+    log.info("Ingestion terminée : %d récupérés, %d déjà frais, %d erreurs, %d appels API%s",
+             summary.fetched, summary.skipped_fresh, summary.failed, summary.api_calls,
+             " — QUOTA ATTEINT" if summary.quota_exceeded else "")
     return summary
 
 
@@ -180,6 +193,7 @@ def _execute(tasks: list[tuple[Dataset, str]], settings: Settings, store: Store,
             row["rows"] = _payload_rows(payload)
             with lock:
                 summary.fetched += 1
+                summary.ok_by_dataset[ds.name] = summary.ok_by_dataset.get(ds.name, 0) + 1
         except QuotaExceededError as exc:
             with lock:
                 if not summary.quota_exceeded:
@@ -188,11 +202,20 @@ def _execute(tasks: list[tuple[Dataset, str]], settings: Settings, store: Store,
                 summary.quota_exceeded = True
             return
         except PlanRestrictedError as exc:
+            # Le plan peut refuser un endpoint entier OU seulement certains tickers (plan gratuit : ~87 tickers).
+            # On ne désactive le dataset entier qu'après 3 refus sans aucun succès.
             row.update(status="restricted", error=str(exc)[:300])
             with lock:
-                if ds.name not in summary.restricted_datasets:
-                    log.warning("Endpoint non disponible avec votre plan, ignoré : %s (%s)", ds.name, ds.path)
-                summary.restricted_datasets.add(ds.name)
+                refused = summary.restricted_symbols.setdefault(ds.name, [])
+                refused.append(key)
+                if ds.name not in summary.restriction_messages:
+                    summary.restriction_messages[ds.name] = str(exc)[:300]
+                    log.warning("Accès refusé par FMP pour %s/%s : %s", ds.name, key, str(exc)[:200])
+                if (len(refused) >= 3 and not summary.ok_by_dataset.get(ds.name)
+                        and ds.name not in summary.restricted_datasets):
+                    summary.restricted_datasets.add(ds.name)
+                    log.warning("Endpoint non disponible avec votre plan, ignoré pour ce run : %s (%s)",
+                                ds.name, ds.path)
         except (FMPError, ValueError) as exc:
             row.update(status="error", error=str(exc)[:300])
             with lock:

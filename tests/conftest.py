@@ -1,3 +1,4 @@
+import copy
 import dataclasses
 from datetime import date
 
@@ -14,7 +15,9 @@ TEST_TICKERS = ["MSFT", "KO", "JNJ", "AAPL"]
 @pytest.fixture()
 def settings(tmp_path):
     base = get_settings()
-    return dataclasses.replace(base, data_dir=tmp_path / "data", tickers=list(TEST_TICKERS))
+    raw = copy.deepcopy(base.raw)
+    raw.setdefault("api", {})["plan"] = "starter"  # couverture complète dans les tests
+    return dataclasses.replace(base, raw=raw, data_dir=tmp_path / "data", tickers=list(TEST_TICKERS))
 
 
 @pytest.fixture()

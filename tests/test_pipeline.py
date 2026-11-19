@@ -121,3 +121,61 @@ def test_quota_exceeded_stops_and_resumes(settings, store):
     second = FakeFMPClient(today=date(2026, 11, 19))
     s2 = run_ingestion(settings, store, second)
     assert s2.skipped_fresh >= 30 and not s2.quota_exceeded
+
+
+def test_symbol_level_restriction_does_not_disable_dataset(settings, store):
+    class SomeSymbols(FakeFMPClient):
+        def get(self, path, params=None):
+            if path == "quote" and params.get("symbol") == "KO":
+                self.calls += 1
+                raise PlanRestrictedError("Premium Query Parameter: symbol not available")
+            return super().get(path, params)
+
+    result = run_pipeline(settings, store, client=SomeSymbols(today=date(2026, 11, 19)), force=True)
+    assert "quote" not in result["ingest"]["restricted_datasets"]
+    assert result["ingest"]["restricted_symbols"]["quote"] == ["KO"]
+    quote = store.read("silver", "quote")
+    assert set(quote["symbol"]) == set(TEST_TICKERS) - {"KO"}
+    val = store.read("gold", "valuation").set_index("symbol")
+    assert val.loc["KO", "price"] > 0  # repli sur le prix du profil
+
+
+def test_gold_without_financial_statements(settings, store):
+    blocked = {"income-statement", "balance-sheet-statement", "cash-flow-statement", "ratios", "key-metrics"}
+
+    class NoStatements(FakeFMPClient):
+        def get(self, path, params=None):
+            if path in blocked:
+                self.calls += 1
+                raise PlanRestrictedError("Restricted Endpoint")
+            return super().get(path, params)
+
+    result = run_pipeline(settings, store, client=NoStatements(today=date(2026, 11, 19)), force=True)
+    assert result["status"] in ("success", "partial")
+    assert "income_statement_annual" in result["ingest"]["restricted_datasets"]
+    val = store.read("gold", "valuation")
+    assert set(val["symbol"]) == set(TEST_TICKERS)
+    assert store.read("gold", "graham_criteria").groupby("symbol").size().eq(7).all()
+    assert not store.read("gold", "screener").empty
+
+
+def test_basic_plan_caps_history_and_excludes_datasets(settings, store):
+    import copy
+    import dataclasses
+
+    raw = copy.deepcopy(settings.raw)
+    raw["api"]["plan"] = "basic"
+    basic = dataclasses.replace(settings, raw=raw)
+    assert basic.history["annual_statements_limit"] == 5
+    seen = []
+
+    class Spy(FakeFMPClient):
+        def get(self, path, params=None):
+            seen.append((path, dict(params or {})))
+            return super().get(path, params)
+
+    run_ingestion(basic, store, Spy(today=date(2026, 11, 19)), force=True)
+    paths = {p for p, _ in seen}
+    assert "news/stock" not in paths and "insider-trading/search" not in paths
+    assert all(p.get("limit", 0) <= 5 for path, p in seen if path == "income-statement")
+    assert all(p.get("period") != "quarter" for path, p in seen if path == "income-statement")

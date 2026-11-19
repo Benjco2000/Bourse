@@ -42,3 +42,42 @@ def test_stock_page(demo_env, symbol):
     assert not at.exception, [e.value for e in at.exception]
     assert symbol in at.title[0].value
     assert len(at.tabs) == 9
+
+
+@pytest.fixture()
+def sparse_env(settings, store, monkeypatch):
+    """Plan restreint : pas d'états financiers, ni news, et certains tickers refusés."""
+    from datetime import date
+
+    from bourse.fmp.client import PlanRestrictedError
+    from bourse.fmp.fake import FakeFMPClient
+    from bourse.pipeline import run_pipeline
+
+    blocked = {"income-statement", "balance-sheet-statement", "cash-flow-statement", "ratios", "key-metrics",
+               "dividends", "financial-scores", "news/stock", "insider-trading/search"}
+
+    class Sparse(FakeFMPClient):
+        def get(self, path, params=None):
+            sym = (params or {}).get("symbol")
+            if path in blocked or (path in ("quote", "historical-price-eod/full") and sym == "KO"):
+                self.calls += 1
+                raise PlanRestrictedError("Restricted")
+            return super().get(path, params)
+
+    run_pipeline(settings, store, client=Sparse(today=date(2026, 11, 19)), force=True)
+    monkeypatch.setenv("BOURSE_DATA_DIR", str(store.root))
+    import streamlit as st
+
+    st.cache_resource.clear()
+    st.cache_data.clear()
+    return store
+
+
+@pytest.mark.parametrize("symbol", ["KO", "MSFT"])
+def test_stock_page_with_sparse_data(sparse_env, symbol):
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.run()
+    at.query_params["symbol"] = symbol
+    at.switch_page("views/stock.py")
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
