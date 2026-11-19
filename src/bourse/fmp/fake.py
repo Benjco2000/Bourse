@@ -309,13 +309,38 @@ class FakeFMPClient:
                  "epsAvg": eps * (1 + c["growth"] + 0.02) ** (i + 1), "numAnalystsEps": 20}
                 for i in range(0, 4)]
 
+    NEWS_TEMPLATES = [
+        ("{s} beats expectations as revenue growth accelerates", 1),
+        ("{s} raises full-year guidance after strong quarter", 1),
+        ("{s} announces record share buyback program", 1),
+        ("{s} shares fall after weak outlook and margin pressure", -1),
+        ("Regulators open investigation into {s} practices", -1),
+        ("{s} faces lawsuit over product recall", -1),
+        ("{s} to present at industry conference next month", 0),
+        ("{s} names new chief financial officer", 0),
+    ]
+
     def _news(self, sym: str, p: dict) -> list[dict]:
-        titles = ["publie des résultats trimestriels", "annonce un programme de rachat d'actions",
-                  "dévoile un nouveau produit", "relève ses perspectives annuelles", "nomme un nouveau directeur financier"]
-        return [{"symbol": sym, "publishedDate": f"{(self.today - timedelta(days=i * 2)).isoformat()} 14:00:00",
-                 "publisher": "Demo Wire", "title": f"{sym} {titles[i % len(titles)]} (exemple)", "image": "",
-                 "site": "example.com", "text": "Article fictif généré pour la démonstration.",
-                 "url": f"https://example.com/{sym.lower()}/{i}"} for i in range(8)]
+        """~1 article tous les 3 jours sur 400 jours, dont des doublons (même titre, autre site)."""
+        r = _rng("news", sym)
+        rows = []
+        for i in range(0, 400, 3):
+            day = self.today - timedelta(days=i)
+            title, _ = self.NEWS_TEMPLATES[int(r.integers(len(self.NEWS_TEMPLATES)))]
+            base = {"symbol": sym, "publishedDate": f"{day.isoformat()} {8 + i % 10:02d}:00:00",
+                    "publisher": "Demo Wire", "title": f"{title.format(s=sym)} (exemple)", "image": "",
+                    "site": "example.com", "text": "Article fictif généré pour la démonstration.",
+                    "url": f"https://example.com/{sym.lower()}/{i}"}
+            rows.append(base)
+            if i % 30 == 0:  # reprise du même article par un autre site
+                rows.append(base | {"site": "mirror.example.org", "publisher": "Mirror",
+                                    "url": f"https://mirror.example.org/{sym.lower()}/{i}",
+                                    "publishedDate": f"{day.isoformat()} 23:00:00"})
+        lo = str(p.get("from", "1900-01-01"))
+        hi = str(p.get("to", "2999-12-31")) + " 99"
+        rows = [x for x in rows if lo <= x["publishedDate"] <= hi]
+        limit, page = int(p.get("limit", 100)), int(p.get("page", 0))
+        return rows[page * limit:(page + 1) * limit]
 
     def _insiders(self, sym: str, p: dict) -> list[dict]:
         r = _rng("ins", sym)

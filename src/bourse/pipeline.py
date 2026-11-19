@@ -15,6 +15,7 @@ from .core.normalize import build_core
 from .fmp.client import FMPClient
 from .ingestion import SupportsGet, resolve_universe, run_ingestion
 from .llm import LLM, make_llm
+from .news import build_news_layer
 from .quality import run_quality_checks
 from .storage import Store, utcnow
 from .transform.business import build_business_summaries
@@ -68,6 +69,7 @@ def run_pipeline(settings: Settings, store: Store, client: SupportsGet | None = 
             summary["gold"]["valuation_history"] = len(build_valuation_history(store))
             llm = llm if llm is not None else (None if demo else make_llm(settings.section("llm")))
             summary["gold"]["business_summaries"] = build_business_summaries(store, llm)
+            summary["gold"].update(build_news_layer(settings, store, resolve_universe(settings, store, tickers), llm))
         if "quality" in steps:
             qa = run_quality_checks(settings, store, run_id)
             summary["quality"] = qa["status"].value_counts().to_dict()

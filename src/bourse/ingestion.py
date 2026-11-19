@@ -80,6 +80,21 @@ def _payload_rows(payload: Any) -> int:
     return 0
 
 
+def _get_paginated(client: SupportsGet, ds: Dataset, params: dict[str, Any]) -> Any:
+    if ds.max_pages <= 1:
+        return client.get(ds.path, params)
+    limit = int(params.get("limit", 100))
+    rows: list[Any] = []
+    for page in range(ds.max_pages):
+        batch = client.get(ds.path, {**params, "page": page})
+        if not isinstance(batch, list) or not batch:
+            break
+        rows.extend(batch)
+        if len(batch) < limit:
+            break
+    return rows
+
+
 def run_ingestion(settings: Settings, store: Store, client: SupportsGet,
                   tickers: list[str] | None = None, datasets: list[str] | None = None,
                   force: bool = False) -> IngestionSummary:
@@ -132,9 +147,9 @@ def run_ingestion(settings: Settings, store: Store, client: SupportsGet,
     if not force:
         for ds in per_symbol:
             if ds.incremental and store.exists("silver", ds.name):
-                df = store.read("silver", ds.name, columns=["symbol", "date"])
-                if not df.empty:
-                    last_dates[ds.name] = df.groupby("symbol")["date"].max().to_dict()
+                df = store.read("silver", ds.name)
+                if not df.empty and {ds.key_field, ds.date_field} <= set(df.columns):
+                    last_dates[ds.name] = df.groupby(ds.key_field)[ds.date_field].max().to_dict()
 
     tasks = []
     for ds in per_symbol:
@@ -185,12 +200,13 @@ def _execute(tasks: list[tuple[Dataset, str]], settings: Settings, store: Store,
             params[ds.symbol_param] = key
             known = last_dates.get(ds.name, {})
             if ds.incremental and key in known:
-                params["from"] = (pd.Timestamp(known[key]) - pd.Timedelta(days=7)).date().isoformat()
+                params["from"] = (pd.Timestamp(known[key]) - pd.Timedelta(days=3 if ds.max_pages > 1 else 7)
+                                  ).date().isoformat()
         fetched_at = utcnow()
         row: dict[str, Any] = {"dataset": ds.name, "key": key, "last_attempt_at": fetched_at,
                                "last_success_at": pd.NaT, "status": "ok", "error": None, "rows": 0}
         try:
-            payload = client.get(ds.path, params)
+            payload = _get_paginated(client, ds, params)
             store.write_bronze(ds.name, key, payload, params, fetched_at)
             row["last_success_at"] = fetched_at
             row["rows"] = _payload_rows(payload)

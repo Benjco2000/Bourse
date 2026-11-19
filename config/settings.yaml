@@ -54,7 +54,7 @@ history:
   prices_start: "2008-01-01"      # premier chargement des prix / capitalisations journaliers
   annual_statements_limit: 20     # nb d'exercices annuels récupérés (KPIs 5 ans à des dates passées, ML)
   quarterly_statements_limit: 40  # nb de trimestres (TTM point-in-time sur ~10 ans, multiples historiques)
-  news_limit: 30
+  news_history_days: 365         # profondeur du premier chargement des actualités (Starter : 1 an max)
 
 valuation:
   # Hypothèses par défaut — modifiables aussi en direct dans l'onglet "Valorisation" de l'app.
@@ -116,5 +116,13 @@ cap_buckets:
 # Sans clé, aucun texte IA n'est généré (seuls les textes sourcés sont affichés).
 llm:
   enabled: true
+  max_articles_scored_per_run: 400   # plafond de coût : articles notés par le LLM à chaque run (cache par URL)
   provider: openai
   model: gpt-6-luna      # modèle économique d'OpenAI ; "gpt-6.2-sol" pour plus de qualité (plus cher)
+
+# --------------------------------------------------------------------------- Actualités & sentiment (page 3)
+news:
+  synthesis_window_days: 30     # articles pris en compte pour la synthèse IA
+  synthesis_max_articles: 40
+  min_articles_for_synthesis: 3
+  positive_threshold: 0.15      # score moyen > seuil -> positif ; < -seuil -> négatif ; sinon neutre

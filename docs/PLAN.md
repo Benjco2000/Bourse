@@ -10,9 +10,9 @@ Référence : spécification produit (5 pages + pipeline ML). Avancement par lot
 | 2 | Modèle de données normalisé (indépendant de FMP), dates de publication, TTM point-in-time, capitalisation quotidienne, segments, pairs, contrôles de cohérence | ✅ |
 | 3 | Calculs financiers testés : 7 KPIs, dette nette, ROCE, multiples de capitalisation, conversion multiple → prix | ✅ |
 | 4 | Page 1 — Vue globale : recherche, fiche société, résumé IA du modèle économique, segments, 7 cartes KPI, concurrents modifiables, bandeau qualité | ✅ |
-| 5 | Page 2 — Historique de valorisation : 5 multiples quotidiens point-in-time, médiane / quartiles | à faire |
-| 6 | Page 3 — Actualités & sentiment : ingestion news, déduplication, synthèse LLM (repli lexical), historique | à faire |
-| 7 | Page 5 — De l'OCF au cash actionnaire : cascade, SBC, rachats, dividendes, acquisitions | à faire |
+| 5 | Page 2 — Historique de valorisation : 5 multiples quotidiens point-in-time, médiane / quartiles | ✅ |
+| 6 | Page 3 — Actualités & sentiment : ingestion news paginée, déduplication, score par article (LLM, repli lexical), synthèse LLM, historique | ✅ |
+| 7 | Page 5 — De l'OCF au cash actionnaire : cascade, SBC, rachats, dividendes, acquisitions | ✅ |
 | 8 | Pipeline ML : dataset temporel, baselines, Ridge / RF / HistGB, validation chronologique, MLflow, `load_model()`, page 4 | à faire |
 | 9 | Durcissement : tests de bout en bout, UX, bandeau qualité, dépannage | à faire |
 | 10 | Préparation production : `docs/ROADMAP_PRODUCTION.md` (FMP Starter/Premium, GCP vs Databricks, coûts) | à faire |

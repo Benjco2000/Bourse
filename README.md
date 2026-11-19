@@ -3,7 +3,9 @@
 Application d'analyse boursière inspirée de GrahamInvest, alimentée par l'API
 [Financial Modeling Prep](https://site.financialmodelingprep.com/) (FMP) et mise à jour quotidiennement.
 
-Pour chaque action suivie :
+Pages principales : **Vue globale** (fiche, 7 KPIs, concurrents), **Historique de valorisation**
+(5 multiples point-in-time), **Actualités & sentiment**, **Cash & actionnaires** (de l'OCF au cash
+actionnaire). La page **Valorisation IA** (modèle ML) est en cours. Pages « Bonus » (version initiale) :
 
 - **Résumé** : cours, verdict de valorisation, juste valeur, marge de sécurité, critères de Graham, notes sur 100 ;
 - **Valorisation** : nombre de Graham, formule révisée de Graham, DCF, multiple de P/E historique (+ DCF FMP

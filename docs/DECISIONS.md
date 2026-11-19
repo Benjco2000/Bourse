@@ -116,3 +116,36 @@ peut les modifier, le choix est enregistré par société (`data/app/peer_overri
 
 **P6 — Cartes KPI.** Statut porté par la couleur **et** une icône + libellé (accessibilité). Mini-courbe
 de la série annuelle sous-jacente (10 derniers exercices), seuil et période toujours affichés.
+
+## Pages 2, 3 et 5
+
+**V1 — Historique des multiples (`gold.valuation_history`).** Numérateur : capitalisation du jour.
+Dénominateur : dernier TTM **publié** à cette date (`merge_asof` sur `available_date`), trimestriel
+prioritaire sur l'annuel pour une même fin de période. TTM dont la période est close depuis plus de 15 mois :
+périmé, multiple non calculé. Dénominateur ≤ 0 : N/A (trou dans la courbe, part non calculable affichée).
+Affichage quotidien jusqu'à 3 ans, hebdomadaire au-delà. Médiane et quartiles calculés sur la période
+affichée. Échelle verticale bornée à Q3 + 3 × IQR quand des valeurs extrêmes (dénominateur proche de 0)
+écraseraient la courbe ; le nombre de points hors échelle est indiqué (les données ne sont pas modifiées).
+
+**N1 — Actualités.** Endpoint `news/stock`, paginé (100 par page, 10 pages max), premier chargement sur
+`history.news_history_days` (365 j, limite du plan Starter), puis incrémental. Déduplication : même titre
+normalisé publié à moins de 3 jours d'intervalle → un seul article « principal », les reprises sont comptées.
+Pertinence : 1,0 si le ticker ou le nom de la société figure dans le titre, sinon 0,6.
+
+**N2 — Sentiment par article** dans [−1 ; +1] : LLM par lots de 25 (sortie JSON), mis en cache par URL,
+plafonné à `llm.max_articles_scored_per_run` articles par run (les suivants le sont aux runs suivants) ; à
+défaut, lexique financier minimal (inspiré de Loughran-McDonald), méthode tracée article par article.
+Agrégation hebdomadaire = moyenne pondérée par la pertinence, avec le nombre d'articles affiché à part.
+Classe : positif si > 0,15, négatif si < −0,15, sinon neutre (configurable).
+
+**N3 — Synthèse IA** sur les 30 derniers jours (40 articles max, triés par pertinence puis date) : thèmes,
+positifs, négatifs, risques, sentiment, confiance, et identifiants des articles justificatifs (vérifiés).
+Moins de 3 articles → « données insuffisantes », pas d'appel LLM. Mise en cache sur l'ensemble des URLs.
+
+**C1 — Cascade de trésorerie (page 5).** OCF → CAPEX → FCF → rachats, dividendes, acquisitions nettes,
+dette nette, émissions d'actions → « autres flux / réconciliation » → variation de trésorerie publiée.
+Un poste non publié n'est jamais mis à zéro : il est exclu et le libellé de la réconciliation le signale.
+La SBC n'est pas dans la cascade (charge non décaissée) : « FCF après SBC » est présenté à part comme
+indicateur analytique. Effet des rachats : actions rachetées ≈ montant / cours moyen de l'exercice,
+comparé à la variation nette des actions diluées moyennes ; l'écart approxime les émissions.
+Rendements (dividende, rachats) calculés sur la capitalisation actuelle : indicatifs pour une période passée.

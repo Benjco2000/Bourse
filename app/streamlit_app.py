@@ -20,6 +20,8 @@ pages = {
         st.Page("views/overview.py", title="Vue globale", icon=":material/dashboard:", default=True),
         st.Page("views/valuation.py", title="Historique de valorisation", icon=":material/show_chart:",
                 url_path="valorisation"),
+        st.Page("views/news_sentiment.py", title="Actualités & sentiment", icon=":material/newspaper:",
+                url_path="actualites"),
         st.Page("views/cash.py", title="Cash & actionnaires", icon=":material/payments:", url_path="cash"),
     ],
     "Bonus": [
@@ -27,7 +29,7 @@ pages = {
         st.Page("views/stock.py", title="Analyse Graham", icon=":material/query_stats:", url_path="graham"),
         st.Page("views/screener.py", title="Screener", icon=":material/filter_alt:", url_path="screener"),
         st.Page("views/watchlist.py", title="Ma watchlist", icon=":material/star:", url_path="watchlist"),
-        st.Page("views/news.py", title="Flux d'actualités", icon=":material/newspaper:", url_path="flux-actualites"),
+        st.Page("views/news.py", title="Flux d'actualités", icon=":material/feed:", url_path="flux-actualites"),
         st.Page("views/earnings.py", title="Calendrier des résultats", icon=":material/event:",
                 url_path="calendrier"),
     ],

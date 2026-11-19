@@ -122,3 +122,28 @@ sauf mention contraire. Conventions de signe : voir `DECISIONS.md` (F2).
 | model, generated_at | Modèle LLM et date de génération |
 | input_hash | Empreinte des entrées (cache) |
 | segments_fiscal_year | Exercice des segments utilisés |
+
+## gold.valuation_history — multiples quotidiens point-in-time
+
+`ticker, date, market_cap, market_cap_source, ttm_period_end, ttm_method, free_cash_flow, operating_cash_flow,
+net_income, gross_profit, revenue` (TTM utilisés), `p_fcf, p_ocf, p_net_income, p_gross_profit, p_sales`
+(capitalisation / TTM ; vide si non calculable).
+
+## core.news — actualités normalisées
+
+| Champ | Description |
+|---|---|
+| ticker, published_at, title, source, url, summary | Article (source FMP) |
+| relevance | 1,0 si ticker / nom dans le titre, sinon 0,6 |
+| dup_group, duplicates, is_primary | Regroupement des reprises (même titre, < 3 jours) |
+| retrieved_at | Date de récupération |
+
+## gold.news_sentiment
+
+`url, ticker, score (−1 à +1), method (llm:<modèle> | lexicon), scored_at`.
+
+## gold.news_synthesis
+
+`ticker, window_start, window_end, n_articles, mean_score, score_class (positif | neutre | négatif),
+urls, status (ok | no_llm | insufficient | error), synthesis_json (thèmes, positifs, négatifs, risques,
+sentiment, confiance, article_urls), model, generated_at, input_hash`.

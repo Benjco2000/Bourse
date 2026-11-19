@@ -27,6 +27,11 @@ class Dataset:
     symbol_param: str = "symbol"
     # True = on ne re-télécharge que depuis la dernière date connue (paramètre `from`)
     incremental: bool = False
+    # colonne (silver) utilisée pour l'incrémental, et identifiant du ticker dans cette table
+    date_field: str = "date"
+    key_field: str = "symbol"
+    # pagination : appels page=0..max_pages-1 tant que la page est pleine (`limit` résultats)
+    max_pages: int = 1
     # Paramètres dynamiques (dépendant de la config / de la date du jour)
     params: Callable[[dict[str, Any]], dict[str, Any]] = field(default=lambda cfg: {})
     description: str = ""
@@ -77,8 +82,12 @@ DATASETS: list[Dataset] = [
     Dataset("grades_consensus", "grades-consensus", keys=("symbol",)),
     Dataset("analyst_estimates", "analyst-estimates", keys=("symbol", "date"), frequency="weekly",
             params=lambda cfg: {"period": "annual", "limit": 10}),
-    Dataset("stock_news", "news/stock", keys=("url",), symbol_param="symbols",
-            params=lambda cfg: {"limit": cfg["history"].get("news_limit", 30)}),
+    Dataset("stock_news", "news/stock", keys=("url",), symbol_param="symbols", incremental=True,
+            date_field="published_date", key_field="query_symbol", max_pages=10,
+            params=lambda cfg: {"limit": 100, "from": (_today() - timedelta(
+                days=int(cfg["history"].get("news_history_days", 365)))).isoformat(),
+                "to": _today().isoformat()},
+            description="Actualités par société (historique initial d'un an, puis incrémental)"),
     Dataset("insider_trades", "insider-trading/search",
             keys=("symbol", "filing_date", "transaction_date", "reporting_name", "transaction_type",
                   "securities_transacted", "price"),

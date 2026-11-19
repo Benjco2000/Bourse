@@ -8,7 +8,7 @@ pytest.importorskip("streamlit")
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
 APP = str(Path(__file__).resolve().parents[1] / "app" / "streamlit_app.py")
-PAGES = ["views/overview.py", "views/valuation.py", "views/cash.py", "views/home.py", "views/stock.py", "views/screener.py", "views/watchlist.py", "views/news.py",
+PAGES = ["views/overview.py", "views/valuation.py", "views/news_sentiment.py", "views/cash.py", "views/home.py", "views/stock.py", "views/screener.py", "views/watchlist.py", "views/news.py",
          "views/earnings.py", "views/pipeline.py"]
 
 
@@ -98,5 +98,15 @@ def test_overview_page(demo_env, symbol):
 def test_overview_page_with_sparse_data(sparse_env):
     at = AppTest.from_file(APP, default_timeout=60)
     at.query_params["symbol"] = "KO"
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+
+
+@pytest.mark.parametrize("page", ["views/valuation.py", "views/news_sentiment.py", "views/cash.py"])
+def test_new_pages_with_sparse_data(sparse_env, page):
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.query_params["symbol"] = "KO"
+    at.run()
+    at.switch_page(page)
     at.run()
     assert not at.exception, [e.value for e in at.exception]

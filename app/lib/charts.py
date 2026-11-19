@@ -256,3 +256,22 @@ def grouped_bars(df: pd.DataFrame, x: str, series: dict[str, str], currency: str
     fig.update_yaxes(tickformat=",.2s")
     fig.update_layout(bargap=0.25, bargroupgap=0.08)
     return fig
+
+
+def sentiment_history(weekly: pd.DataFrame) -> go.Figure:
+    """Score de sentiment hebdomadaire moyen (−1 à +1) ; le nombre d'articles est tracé à part."""
+    fig = go.Figure(go.Scatter(
+        x=weekly["week"], y=weekly["score"], mode="lines+markers", line=dict(color=SERIES[0], width=2),
+        marker=dict(size=6), customdata=weekly["n"], name="Sentiment",
+        hovertemplate="Semaine du %{x|%d/%m/%Y} : %{y:+.2f}<br>%{customdata} article(s)<extra></extra>"))
+    fig.add_hline(y=0, line=dict(color=MUTED, width=1))
+    fig = _layout(fig, None, height=260, showlegend=False, hovermode="closest", margin=dict(l=8, r=8, t=10, b=8))
+    fig.update_yaxes(range=[-1.05, 1.05], tickvals=[-1, -0.5, 0, 0.5, 1])
+    return fig
+
+
+def article_counts(weekly: pd.DataFrame) -> go.Figure:
+    fig = go.Figure(go.Bar(x=weekly["week"], y=weekly["n"], marker=dict(color="#86b6ef", cornerradius=2),
+                           hovertemplate="Semaine du %{x|%d/%m/%Y} : %{y} article(s)<extra></extra>"))
+    fig = _layout(fig, None, height=150, showlegend=False, hovermode="closest", margin=dict(l=8, r=8, t=10, b=8))
+    return fig
