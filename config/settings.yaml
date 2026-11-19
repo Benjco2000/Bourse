@@ -1,0 +1,83 @@
+# Configuration de l'application Bourse.
+# Tout ce qui est "métier" (univers, fréquences, hypothèses) est ici, pas dans le code.
+
+universe:
+  # Tickers suivis par le pipeline. Ajoutez/retirez librement.
+  # Budget API : ~19 appels par ticker au premier chargement, ~9 par ticker les jours suivants
+  # (les états financiers ne sont rafraîchis qu'une fois par semaine).
+  # Plan gratuit (250 appels/jour) : le premier chargement de 20 tickers s'étale sur 2 jours
+  # (le pipeline reprend automatiquement là où il s'est arrêté).
+  tickers:
+    - MSFT
+    - AAPL
+    - GOOGL
+    - AMZN
+    - NVDA
+    - META
+    - BRK-B
+    - JNJ
+    - KO
+    - PG
+    - JPM
+    - V
+    - XOM
+    - PEP
+    - WMT
+    - MCD
+    - INTC
+    - CSCO
+    - PFE
+    - T
+  # true = ajoute automatiquement les constituants du S&P 500 (≈ 500 tickers × ~20 appels).
+  # Attention : nécessite un plan FMP payant (quota quotidien du plan gratuit ≈ 250 appels).
+  include_sp500: false
+
+api:
+  base_url: https://financialmodelingprep.com/stable
+  # Quota du plan : Starter = 300/min, Premium = 750/min. Gardez une marge.
+  requests_per_minute: 250
+  max_workers: 8
+  timeout_seconds: 30
+  max_retries: 4
+
+# Fréquence de rafraîchissement par jeu de données (en heures).
+# Le pipeline peut tourner tous les jours : un jeu de données "frais" n'est pas re-téléchargé,
+# ce qui économise le quota API. `--force` ignore ces fréquences.
+refresh_hours:
+  daily: 20      # cotations, prix, news, consensus analystes, dividendes...
+  weekly: 164    # états financiers, ratios annuels, profil, scores...
+
+history:
+  prices_start: "2015-01-01"     # premier chargement des prix journaliers
+  annual_statements_limit: 15    # nb d'exercices annuels récupérés
+  quarterly_statements_limit: 8  # nb de trimestres (pour les calculs TTM)
+  news_limit: 30
+
+valuation:
+  # Hypothèses par défaut — modifiables aussi en direct dans l'onglet "Valorisation" de l'app.
+  discount_rate: 0.09          # taux d'actualisation du DCF
+  terminal_growth: 0.025       # croissance perpétuelle
+  high_growth_years: 5         # années de croissance "élevée", suivies d'autant d'années de convergence
+  max_growth: 0.15             # plafond de croissance utilisé (prudence à la Graham)
+  min_growth: -0.05
+  # Formule révisée de Graham : V = EPS × (8.5 + 2g) × 4.4 / Y
+  # Y = rendement des obligations AAA. "auto" = taux 10 ans US (FMP) + spread ci-dessous.
+  aaa_yield: auto
+  aaa_spread: 0.008
+  aaa_yield_fallback: 0.05
+  # Méthodes prises en compte dans la "juste valeur" composite (médiane)
+  composite_methods: [graham_number, graham_formula, dcf, pe_multiple]
+  # Seuils de verdict sur la marge de sécurité
+  undervalued_mos: 0.20
+  overvalued_mos: -0.10
+
+graham:
+  # Critères de l'investisseur défensif (The Intelligent Investor, ch. 14), seuils modernisés
+  min_revenue: 2.0e9          # "taille suffisante" (100 M$ en 1971 ≈ 2 Md$ aujourd'hui)
+  min_current_ratio: 2.0
+  earnings_stability_years: 10
+  dividend_record_years: 20
+  min_eps_growth: 0.33        # croissance de l'EPS moyen (3 ans) sur 10 ans
+  max_pe: 15
+  max_pb: 1.5
+  max_pe_x_pb: 22.5

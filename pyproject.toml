@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bourse"
+version = "0.1.0"
+description = "Application d'analyse boursière (style Graham) alimentée par l'API Financial Modeling Prep"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.31",
+    "pandas>=2.1",
+    "pyarrow>=14",
+    "duckdb>=1.0",
+    "pyyaml>=6",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+app = [
+    "streamlit>=1.40",
+    "plotly>=5.20",
+]
+dev = [
+    "pytest>=8",
+    "ruff>=0.5",
+    "streamlit>=1.40",
+    "plotly>=5.20",
+]
+
+[project.scripts]
+bourse = "bourse.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501"]
