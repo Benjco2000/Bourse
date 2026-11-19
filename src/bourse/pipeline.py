@@ -14,11 +14,14 @@ from .config import Settings
 from .core.normalize import build_core
 from .fmp.client import FMPClient
 from .ingestion import SupportsGet, resolve_universe, run_ingestion
+from .llm import LLM, make_llm
 from .quality import run_quality_checks
 from .storage import Store, utcnow
+from .transform.business import build_business_summaries
 from .transform.gold import build_gold
 from .transform.kpis import build_kpis
 from .transform.silver import build_silver
+from .transform.snapshot import build_snapshot
 
 log = logging.getLogger(__name__)
 
@@ -39,7 +42,7 @@ def make_client(settings: Settings) -> FMPClient:
 def run_pipeline(settings: Settings, store: Store, client: SupportsGet | None = None,
                  steps: tuple[str, ...] = ALL_STEPS, tickers: list[str] | None = None,
                  datasets: list[str] | None = None, force: bool = False, full_refresh: bool = False,
-                 demo: bool = False) -> dict[str, Any]:
+                 demo: bool = False, llm: LLM | None = None) -> dict[str, Any]:
     run_id = uuid.uuid4().hex[:12]
     started = utcnow()
     t0 = time.monotonic()
@@ -60,6 +63,9 @@ def run_pipeline(settings: Settings, store: Store, client: SupportsGet | None = 
         if "gold" in steps:
             summary["gold"] = build_gold(settings, store)
             summary["gold"]["kpis"] = build_kpis(settings, store)
+            summary["gold"]["company_snapshot"] = len(build_snapshot(settings, store))
+            llm = llm if llm is not None else (None if demo else make_llm(settings.section("llm")))
+            summary["gold"]["business_summaries"] = build_business_summaries(store, llm)
         if "quality" in steps:
             qa = run_quality_checks(settings, store, run_id)
             summary["quality"] = qa["status"].value_counts().to_dict()

@@ -9,7 +9,7 @@ Référence : spécification produit (5 pages + pipeline ML). Avancement par lot
 | 1 | Socle : audit, univers MVP (3 groupes de pairs), couche `core`, seuils KPI centralisés, docs | ✅ |
 | 2 | Modèle de données normalisé (indépendant de FMP), dates de publication, TTM point-in-time, capitalisation quotidienne, segments, pairs, contrôles de cohérence | ✅ |
 | 3 | Calculs financiers testés : 7 KPIs, dette nette, ROCE, multiples de capitalisation, conversion multiple → prix | ✅ |
-| 4 | Page 1 — Vue globale : recherche, fiche société, segments, 7 cartes KPI, tableau concurrents | à faire |
+| 4 | Page 1 — Vue globale : recherche, fiche société, résumé IA du modèle économique, segments, 7 cartes KPI, concurrents modifiables, bandeau qualité | ✅ |
 | 5 | Page 2 — Historique de valorisation : 5 multiples quotidiens point-in-time, médiane / quartiles | à faire |
 | 6 | Page 3 — Actualités & sentiment : ingestion news, déduplication, synthèse LLM (repli lexical), historique | à faire |
 | 7 | Page 5 — De l'OCF au cash actionnaire : cascade, SBC, rachats, dividendes, acquisitions | à faire |

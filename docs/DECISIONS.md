@@ -92,3 +92,27 @@ deux publications ; sensible aux splits si le cours et le nombre d'actions ne so
 qualité ; les calculs concernés passent en N/A ou orange, jamais en valeur corrigée silencieusement.
 
 **Q2 — Absent ≠ zéro.** Toutes les fonctions de calcul renvoient N/A sur donnée manquante.
+
+## Page « Vue globale » (lot 4)
+
+**P1 — Sélection de la société dans la barre latérale**, partagée par toutes les pages (et l'URL
+`?symbol=MSFT`, pour pouvoir partager un lien). Recherche par ticker ou par nom dans la liste.
+
+**P2 — `gold.company_snapshot` calculé dans le pipeline**, pas dans la page : capitalisation la plus
+récente, TTM disponible à cette date, multiples P/S, P/OCF, P/FCF avec la raison de chaque N/A, et un
+niveau de qualité (`complete` / `partial` / `degraded`) avec ses explications, affiché en tête de page.
+
+**P3 — Devise.** Si la devise de cotation diffère de celle des comptes, les multiples ne sont pas calculés
+(N/A « devises différentes ») plutôt que de mélanger des devises sans conversion.
+
+**P4 — Résumé IA « comment l'entreprise gagne de l'argent ».** Généré dans le pipeline (jamais à
+l'ouverture d'une page) par un LLM (API Anthropic, modèle configurable), uniquement à partir de la
+description FMP et des segments publiés, avec consigne de ne rien inventer. Mis en cache par empreinte des
+entrées : il n'est régénéré que si la description, les segments ou le modèle changent. Affiché avec un
+badge « Généré par IA », séparé de la description sourcée. Sans clé `ANTHROPIC_API_KEY`, rien n'est généré.
+
+**P5 — Concurrents.** Par défaut, le groupe de pairs de la configuration (3 au maximum) ; l'utilisateur
+peut les modifier, le choix est enregistré par société (`data/app/peer_overrides.json`) et réversible.
+
+**P6 — Cartes KPI.** Statut porté par la couleur **et** une icône + libellé (accessibilité). Mini-courbe
+de la série annuelle sous-jacente (10 derniers exercices), seuil et période toujours affichés.

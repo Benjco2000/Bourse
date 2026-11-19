@@ -137,10 +137,10 @@ def cap_bucket(market_cap: Any, buckets: dict[str, float]) -> str | None:
     m = num(market_cap)
     if m is None or m <= 0:
         return None
-    if m < buckets.get("small", 2e9):
+    if m < float(buckets.get("small", 2e9)):
         return "small"
-    if m < buckets.get("mid", 10e9):
+    if m < float(buckets.get("mid", 10e9)):
         return "mid"
-    if m < buckets.get("large", 100e9):
+    if m < float(buckets.get("large", 100e9)):
         return "large"
     return "mega"

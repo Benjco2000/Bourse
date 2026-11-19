@@ -66,6 +66,41 @@ def for_symbol(layer: str, name: str, symbol: str, symbol_col: str = "symbol") -
     return df.copy()
 
 
+def companies() -> pd.DataFrame:
+    """Sociétés de l'univers (core), triées par ticker ; repli sur le screener pour les anciennes données."""
+    df = table("core", "companies")
+    if df.empty:
+        sc = screener()
+        if sc.empty:
+            return pd.DataFrame(columns=["ticker", "name"])
+        df = sc.rename(columns={"symbol": "ticker"})[["ticker", "name"]]
+    return df.sort_values("ticker").reset_index(drop=True)
+
+
+def get_peer_override(ticker: str) -> list[str] | None:
+    f = data_location()[0] / "app" / "peer_overrides.json"
+    if not f.exists():
+        return None
+    try:
+        return json.loads(f.read_text()).get(ticker)
+    except (ValueError, OSError):
+        return None
+
+
+def set_peer_override(ticker: str, peers: list[str] | None) -> None:
+    f = data_location()[0] / "app" / "peer_overrides.json"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        current = json.loads(f.read_text()) if f.exists() else {}
+    except ValueError:
+        current = {}
+    if peers is None:
+        current.pop(ticker, None)
+    else:
+        current[ticker] = peers
+    f.write_text(json.dumps(current, indent=2))
+
+
 def screener() -> pd.DataFrame:
     return table("gold", "screener")
 

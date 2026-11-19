@@ -127,3 +127,29 @@ def price_targets(price: float | None, low: float, median: float, consensus: flo
     fig.update_yaxes(visible=False, range=[-1, 1])
     fig.update_xaxes(gridcolor="rgba(128,128,128,0.15)")
     return fig
+
+
+def sparkline(points: list[tuple[int, float]], percent: bool = True, color: str = SERIES[0]) -> go.Figure:
+    """Mini-courbe annuelle pour une carte KPI (sans axes, valeur au survol)."""
+    xs = [str(x) for x, _ in points]
+    ys = [y for _, y in points]
+    fmt = ".1%" if percent else ",.3s"
+    fig = go.Figure(go.Scatter(x=xs, y=ys, mode="lines+markers", line=dict(color=color, width=2),
+                               marker=dict(size=5), hovertemplate="%{x} : %{y:" + fmt + "}<extra></extra>"))
+    fig.update_layout(height=70, margin=dict(l=0, r=0, t=4, b=0), showlegend=False, separators=", ",
+                      xaxis=dict(visible=False), yaxis=dict(visible=False), hovermode="closest")
+    return fig
+
+
+def segment_bars(df: pd.DataFrame, title: str, currency: str = "") -> go.Figure:
+    """Répartition du CA par segment : barres horizontales, part en % en libellé direct."""
+    d = df.sort_values("revenue", ascending=True)
+    total = d["revenue"].sum()
+    fig = go.Figure(go.Bar(
+        y=d["segment"], x=d["revenue"], orientation="h", marker=dict(color=SERIES[0], cornerradius=4),
+        text=[f"{v / total:.0%}" for v in d["revenue"]], textposition="outside", cliponaxis=False,
+        hovertemplate="%{y} : %{x:,.4s} " + currency + "<extra></extra>"))
+    fig = _layout(fig, title, height=50 + 34 * len(d), showlegend=False, hovermode="closest")
+    fig.update_xaxes(visible=False, range=[0, d["revenue"].max() * 1.15])
+    fig.update_yaxes(showgrid=False)
+    return fig

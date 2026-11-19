@@ -8,7 +8,7 @@ pytest.importorskip("streamlit")
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
 APP = str(Path(__file__).resolve().parents[1] / "app" / "streamlit_app.py")
-PAGES = ["views/home.py", "views/stock.py", "views/screener.py", "views/watchlist.py", "views/news.py",
+PAGES = ["views/overview.py", "views/home.py", "views/stock.py", "views/screener.py", "views/watchlist.py", "views/news.py",
          "views/earnings.py", "views/pipeline.py"]
 
 
@@ -79,5 +79,24 @@ def test_stock_page_with_sparse_data(sparse_env, symbol):
     at.run()
     at.query_params["symbol"] = symbol
     at.switch_page("views/stock.py")
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+
+
+@pytest.mark.parametrize("symbol", ["MSFT", "KO"])
+def test_overview_page(demo_env, symbol):
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.query_params["symbol"] = symbol
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert at.title[0].value.startswith(symbol)
+    assert len(at.dataframe) == 1  # tableau des concurrents
+    text = " ".join(m.value for m in at.markdown)
+    assert "Croissance du CA (5 ans)" in text and "Marge de FCF" in text
+
+
+def test_overview_page_with_sparse_data(sparse_env):
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.query_params["symbol"] = "KO"
     at.run()
     assert not at.exception, [e.value for e in at.exception]

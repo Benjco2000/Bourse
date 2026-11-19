@@ -98,3 +98,27 @@ sauf mention contraire. Conventions de signe : voir `DECISIONS.md` (F2).
 | net_debt_to_fcf | Dette nette (dernier bilan) / FCF TTM | < 3 ans |
 | gross_margin_ttm | Marge brute TTM | > 15 % |
 | fcf_margin_ttm | FCF TTM / CA TTM | > 15 % |
+
+## gold.company_snapshot — situation actuelle (une ligne par société)
+
+| Champ | Description |
+|---|---|
+| ticker, name, exchange, sector, industry, country | Identité |
+| trading_currency, reported_currency | Devise de cotation / des comptes |
+| market_cap, market_cap_date, market_cap_source | Dernière capitalisation connue et sa source |
+| cap_bucket | `small` < 2 Md$, `mid` < 10 Md$, `large` < 100 Md$, sinon `mega` (configurable) |
+| revenue_ttm, gross_profit_ttm, net_income_ttm, operating_cash_flow_ttm, capex_ttm, free_cash_flow_ttm, stock_based_compensation_ttm, shares_diluted_ttm | Agrégats 12 mois disponibles à `market_cap_date` |
+| ttm_period_end, ttm_available_date, ttm_method | Période, disponibilité et méthode du TTM |
+| ps, pocf, pfcf | Capitalisation / CA, OCF, FCF TTM (N/A si dénominateur ≤ 0 ou devises différentes) |
+| ps_note, pocf_note, pfcf_note | Raison d'un N/A |
+| quality_level, quality_notes | `complete` / `partial` / `degraded` ; explications séparées par « \| » |
+
+## gold.business_summaries — résumés générés par IA
+
+| Champ | Description |
+|---|---|
+| ticker | Société |
+| summary_md | Texte Markdown (4 rubriques : produits et services, clients, modèle de revenus, segments) |
+| model, generated_at | Modèle LLM et date de génération |
+| input_hash | Empreinte des entrées (cache) |
+| segments_fiscal_year | Exercice des segments utilisés |

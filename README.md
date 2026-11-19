@@ -99,6 +99,10 @@ cp .env.example .env
 FMP_API_KEY=votre_cle_ici
 ```
 
+Optionnel : `ANTHROPIC_API_KEY=...` dans le même fichier active les textes générés par IA (résumé « comment
+l'entreprise gagne de l'argent », puis synthèse des actualités). Ils sont générés pendant `bourse run`, mis en
+cache, et clairement étiquetés dans l'application. Sans cette clé, tout le reste fonctionne.
+
 Ne mettez jamais la clé dans `config/settings.yaml` ni dans le code. Plus tard, sur le cloud, elle ira dans un
 gestionnaire de secrets (voir § 5).
 

@@ -35,10 +35,10 @@ api:
   # Votre plan FMP : basic (gratuit) | starter | premium
   # "basic" : 5 exercices max, pas de trimestriel, ni news/initiés/S&P 500 (évite des appels refusés)
   # "starter" : tout sauf la liste du S&P 500 (endpoint refusé en Starter)
-  plan: basic
+  plan: starter
   base_url: https://financialmodelingprep.com/stable
   # Quota du plan : Starter = 300/min, Premium = 750/min. Gardez une marge.
-  requests_per_minute: 250
+  requests_per_minute: 300
   max_workers: 8
   timeout_seconds: 30
   max_retries: 4
@@ -76,7 +76,7 @@ valuation:
 
 graham:
   # Critères de l'investisseur défensif (The Intelligent Investor, ch. 14), seuils modernisés
-  min_revenue: 2.0e9          # "taille suffisante" (100 M$ en 1971 ≈ 2 Md$ aujourd'hui)
+  min_revenue: 2000000000          # "taille suffisante" (100 M$ en 1971 ≈ 2 Md$ aujourd'hui)
   min_current_ratio: 2.0
   earnings_stability_years: 10
   dividend_record_years: 20
@@ -107,6 +107,12 @@ availability_lag_days:
 
 # Tranches de capitalisation (USD) pour la segmentation ML
 cap_buckets:
-  small: 2.0e9
-  mid: 10.0e9
-  large: 100.0e9
+  small: 2000000000
+  mid: 10000000000
+  large: 100000000000
+
+# --------------------------------------------------------------------------- Textes générés par IA
+# Clé : ANTHROPIC_API_KEY dans .env. Sans clé, aucun texte IA n'est généré (seuls les textes sourcés sont affichés).
+llm:
+  enabled: true
+  model: claude-sonnet-5-5

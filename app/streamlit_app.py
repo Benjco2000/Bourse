@@ -16,14 +16,15 @@ from lib import data  # noqa: E402
 st.set_page_config(page_title="Bourse — analyse à la Graham", page_icon=":material/monitoring:", layout="wide")
 
 pages = {
-    "Marchés": [
-        st.Page("views/home.py", title="Vue d'ensemble", icon=":material/public:", default=True),
-        st.Page("views/stock.py", title="Analyse d'une action", icon=":material/query_stats:", url_path="action"),
+    "Analyse": [
+        st.Page("views/overview.py", title="Vue globale", icon=":material/dashboard:", default=True),
+    ],
+    "Bonus": [
+        st.Page("views/home.py", title="Marché", icon=":material/public:", url_path="marche"),
+        st.Page("views/stock.py", title="Analyse Graham", icon=":material/query_stats:", url_path="graham"),
         st.Page("views/screener.py", title="Screener", icon=":material/filter_alt:", url_path="screener"),
         st.Page("views/watchlist.py", title="Ma watchlist", icon=":material/star:", url_path="watchlist"),
-    ],
-    "Informations": [
-        st.Page("views/news.py", title="Actualités", icon=":material/newspaper:", url_path="actualites"),
+        st.Page("views/news.py", title="Flux d'actualités", icon=":material/newspaper:", url_path="flux-actualites"),
         st.Page("views/earnings.py", title="Calendrier des résultats", icon=":material/event:",
                 url_path="calendrier"),
     ],
@@ -33,24 +34,27 @@ pages = {
 }
 
 nav = st.navigation(pages)
+companies = data.companies()
 
 with st.sidebar:
-    screener = data.screener()
-    if not screener.empty:
-        options = screener.sort_values("symbol")
-        labels = {r.symbol: f"{r.symbol} — {r.name}" for r in options.itertuples()}
-        choice = st.selectbox("Rechercher une action", options=list(labels), index=None,
-                              format_func=lambda s: labels.get(s, s), placeholder="Ticker ou nom...")
-        if choice and choice != st.session_state.get("_last_search"):
-            st.session_state["_last_search"] = choice
-            st.session_state["symbol"] = choice
-            st.session_state["_nav_symbol"] = True
-            st.switch_page("views/stock.py")
+    if not companies.empty:
+        tickers = companies["ticker"].tolist()
+        labels = {r.ticker: f"{r.ticker} — {r.name}" for r in companies.itertuples()}
+        qp = (st.query_params.get("symbol") or "").upper()
+        if qp in tickers and not st.session_state.pop("_nav_symbol", False):
+            st.session_state["symbol"] = qp
+        current = st.session_state.get("symbol")
+        current = current if current in tickers else tickers[0]
+        sym = st.selectbox("Société", tickers, index=tickers.index(current), format_func=lambda s: labels.get(s, s),
+                           help="Recherche par ticker ou par nom : tapez quelques lettres.")
+        st.session_state["symbol"] = sym
+        if st.query_params.get("symbol") != sym:
+            st.query_params["symbol"] = sym
     last = data.last_update()
     st.caption(f"Dernière mise à jour : {last:%d/%m/%Y %H:%M} UTC" if last is not None else "Aucune donnée chargée")
     st.caption("Données : Financial Modeling Prep. Ceci n'est pas un conseil en investissement.")
 
-if screener.empty:
+if companies.empty:
     st.title("Bourse")
     st.info(
         "Aucune donnée disponible pour l'instant.\n\n"

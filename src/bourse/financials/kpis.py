@@ -22,7 +22,7 @@ KPI_META = {
                         "Taux de croissance annuel composé du chiffre d'affaires sur 5 exercices fiscaux."),
     "fcf_cagr_5y": ("Croissance du FCF (5 ans)", "percent",
                     "TCAM du free cash flow (OCF - CAPEX) ; non calculable si le FCF de départ ou d'arrivée est ≤ 0."),
-    "share_change_5y": ("Évolution du nb d'actions (5 ans)", "percent",
+    "share_change_5y": ("Évol. du nb d'actions (5 ans)", "percent",
                         "Variation cumulée du nombre moyen d'actions diluées. Négatif = rachats nets (relution)."),
     "roce_avg_5y": ("ROCE moyen (5 ans)", "percent",
                     "Moyenne des ROCE annuels : EBIT × (1 - taux d'IS effectif) / (actif total - passif courant)."),
