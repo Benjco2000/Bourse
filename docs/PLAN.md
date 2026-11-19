@@ -25,10 +25,13 @@ Les fonctionnalités existantes (critères de Graham, screener, watchlist) sont 
 Élargir l'ingestion (S&P 500 puis davantage), planifier les mises à jour, entraîner le modèle ML sur un volume
 suffisant. Voir les limites ci-dessous.
 
-## Point bloquant identifié pour l'IA
+## Historique disponible et IA
 
-D'après la grille FMP, l'historique est de **5 ans** pour les plans Basic et Starter, **30+ ans** à partir de
-Premium. Un KPI « sur 5 ans » à une date passée exige 5 ans d'historique *avant* cette date : avec 5 ans au
-total, on n'obtient qu'une ou deux dates d'observation par société. Le pipeline ML sera construit et exécutable
-en phase 1, mais le modèle ne sera **pas statistiquement exploitable** sans Premium (ou une autre source
-d'historique long) et un univers de plusieurs centaines de sociétés. Cela sera affiché dans l'application.
+La grille FMP annonce 5 ans d'historique pour Starter, mais le premier run réel (19/11/2026) renvoie des
+comptes annuels depuis **2011** (15 exercices demandés, 15 reçus). Les limites ont été relevées
+(20 exercices, 40 trimestres, cours depuis 2008) pour mesurer la profondeur réellement disponible.
+
+Un KPI « sur 5 ans » à une date passée exige 5 ans d'historique *avant* cette date : avec ~15 ans, on obtient
+~10 ans de dates d'observation par société. Le facteur limitant de la phase 1 devient donc le **nombre de
+sociétés** (10) : le pipeline ML sera exécutable, mais le modèle restera signalé comme non exploitable
+statistiquement tant que l'univers ne comptera pas plusieurs centaines de sociétés (phase 2).

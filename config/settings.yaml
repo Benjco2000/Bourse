@@ -51,9 +51,9 @@ refresh_hours:
   weekly: 164    # états financiers, ratios annuels, profil, scores...
 
 history:
-  prices_start: "2015-01-01"     # premier chargement des prix journaliers
-  annual_statements_limit: 15    # nb d'exercices annuels récupérés
-  quarterly_statements_limit: 8  # nb de trimestres (pour les calculs TTM)
+  prices_start: "2008-01-01"      # premier chargement des prix / capitalisations journaliers
+  annual_statements_limit: 20     # nb d'exercices annuels récupérés (KPIs 5 ans à des dates passées, ML)
+  quarterly_statements_limit: 40  # nb de trimestres (TTM point-in-time sur ~10 ans, multiples historiques)
   news_limit: 30
 
 valuation:

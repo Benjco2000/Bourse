@@ -53,6 +53,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("status", help="derniers runs & contrôles qualité")
     p_ano = sub.add_parser("anomalies", help="détail des anomalies détectées dans les états financiers")
     p_ano.add_argument("tickers", nargs="*")
+    p_ano.add_argument("--all", action="store_true", help="inclure les signalements informatifs")
     p_probe = sub.add_parser("probe", help="teste chaque endpoint FMP pour un ticker (diagnostic de plan)")
     p_probe.add_argument("ticker", nargs="?", default="AAPL")
     sub.add_parser("datasets", help="liste des jeux de données")
@@ -89,7 +90,8 @@ def main(argv: list[str] | None = None) -> int:
         if st.empty:
             print("Aucun état financier en base.")
             return 0
-        st = st[st["quality_flags"].fillna("").str.replace("availability_estimated", "").str.strip(",") != ""]
+        info = set() if args.all else {"availability_estimated", "cost_of_revenue_zero"}
+        st = st[st["quality_flags"].fillna("").map(lambda f: any(x and x not in info for x in f.split(",")))]
         if args.tickers:
             st = st[st["ticker"].isin([t.upper() for t in args.tickers])]
         cols = ["ticker", "period_type", "period_end", "quality_flags", "revenue", "cost_of_revenue", "gross_profit",
