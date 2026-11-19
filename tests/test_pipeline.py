@@ -216,3 +216,15 @@ def test_market_cap_approximation_when_fmp_unavailable(settings, store):
     st = store.read("core", "financial_statements")
     first_avail = st.groupby("ticker")["available_date"].min()
     assert (mc.groupby("ticker")["date"].min() >= first_avail.reindex(mc["ticker"].unique())).all()
+
+
+def test_core_and_gold_restricted_to_current_universe(settings, demo_store):
+    import dataclasses
+
+    from bourse.pipeline import run_pipeline as rp
+
+    smaller = dataclasses.replace(settings, tickers=["MSFT", "KO"])
+    rp(smaller, demo_store, steps=("core", "gold", "quality"))
+    for layer, table, col in (("core", "financial_statements", "ticker"), ("core", "market_cap_daily", "ticker"),
+                              ("gold", "kpis", "ticker"), ("gold", "valuation", "symbol")):
+        assert set(demo_store.read(layer, table)[col]) == {"MSFT", "KO"}, table

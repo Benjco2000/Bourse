@@ -450,7 +450,10 @@ def build_gold(settings: Settings, store: Store) -> dict[str, int]:
         "est": _by_symbol(read("silver", "analyst_estimates")),
         "dcf": _by_symbol(read("silver", "dcf_fmp")),
     }
-    symbols = sorted(set(ctx["quote"]) | set(ctx["profile"]) | set(ctx["fund"]))
+    from ..ingestion import resolve_universe
+
+    universe = set(resolve_universe(settings, store))
+    symbols = sorted((set(ctx["quote"]) | set(ctx["profile"]) | set(ctx["fund"])) & universe)
     aaa = _aaa_yield(settings, store)
     now = utcnow().replace(tzinfo=None)
 

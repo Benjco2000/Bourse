@@ -145,6 +145,7 @@ Ouvrez http://localhost:8501.
 | `bourse transform [--full-refresh]` | recalcule silver/gold depuis le bronze, **sans appel API** |
 | `bourse status` | derniers runs + contrôles qualité |
 | `bourse datasets` | liste des endpoints FMP ingérés |
+| `bourse anomalies [MSFT]` | détail des incohérences détectées dans les états financiers |
 | `bourse probe AAPL` | diagnostic : teste chaque endpoint pour un ticker et affiche ce que votre plan autorise (~26 appels) |
 | `make test` / `make lint` | tests / lint |
 

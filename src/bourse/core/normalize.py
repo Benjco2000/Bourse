@@ -50,6 +50,8 @@ BALANCE_MAP = {
     "current_liabilities": ["total_current_liabilities"],
     "total_liabilities": ["total_liabilities"],
     "total_equity": ["total_stockholders_equity", "total_equity"],
+    "total_equity_incl_minority": ["total_equity"],
+    "minority_interest": ["minority_interest"],
     "cash_and_equivalents": ["cash_and_cash_equivalents"],
     "short_term_investments": ["short_term_investments"],
     "total_debt": ["total_debt"],
@@ -153,7 +155,9 @@ def build_statements(store: Store, settings: Settings) -> pd.DataFrame:
     flag((df["cost_of_revenue"] == 0) & (rev > 0), "cost_of_revenue_zero")
     flag(((gp_calc - df["gross_profit_reported"]).abs() > 0.01 * rev.abs()) & df["gross_profit_reported"].notna(),
          "gross_profit_mismatch")
-    flag(((df["total_liabilities"] + df["total_equity"] - df["total_assets"]).abs() > 0.02 * df["total_assets"]),
+    # Actif = passif + capitaux propres y compris intérêts minoritaires
+    equity_all = df["total_equity_incl_minority"].fillna(df["total_equity"] + df["minority_interest"].fillna(0))
+    flag(((df["total_liabilities"] + equity_all - df["total_assets"]).abs() > 0.02 * df["total_assets"]),
          "balance_sheet_mismatch")
     flag(df["shares_diluted"].isna() | (df["shares_diluted"] <= 0), "shares_missing")
     flag(df["operating_cash_flow"].isna(), "ocf_missing")
@@ -289,6 +293,7 @@ def build_peers(store: Store, settings: Settings, tickers: list[str]) -> pd.Data
             if r.query_symbol not in configured:
                 rows.append({"ticker": r.query_symbol, "peer": r.symbol, "source": "fmp_stock_peers"})
     peers = pd.DataFrame(rows, columns=["ticker", "peer", "source"]).drop_duplicates(["ticker", "peer"])
+    peers = peers[peers["ticker"].isin(tickers)] if tickers else peers
     peers["peer_in_universe"] = peers["peer"].isin(tickers)
     return peers
 
@@ -312,17 +317,25 @@ def build_companies(store: Store) -> pd.DataFrame:
     })
 
 
+def _restrict(df: pd.DataFrame, tickers: list[str]) -> pd.DataFrame:
+    """Ne garde que l'univers courant (le silver peut contenir des tickers retirés de la configuration)."""
+    if df.empty or not tickers:
+        return df
+    col = "ticker" if "ticker" in df.columns else "symbol" if "symbol" in df.columns else None
+    return df[df[col].isin(tickers)].reset_index(drop=True) if col else df
+
+
 def build_core(settings: Settings, store: Store, tickers: list[str]) -> dict[str, int]:
-    statements = build_statements(store, settings)
+    statements = _restrict(build_statements(store, settings), tickers)
     tables = {
-        "companies": build_companies(store),
+        "companies": _restrict(build_companies(store), tickers),
         "financial_statements": statements,
         "ttm": build_ttm(statements),
-        "market_cap_daily": build_market_cap(store, statements),
-        "revenue_segments": build_segments(store),
+        "market_cap_daily": _restrict(build_market_cap(store, statements), tickers),
+        "revenue_segments": _restrict(build_segments(store), tickers),
         "peers": build_peers(store, settings, tickers),
     }
-    prices = store.read("silver", "prices_daily")
+    prices = _restrict(store.read("silver", "prices_daily"), tickers)
     if not prices.empty:
         tables["prices_daily"] = pd.DataFrame({
             "ticker": prices["symbol"], "date": pd.to_datetime(prices["date"]), "close": prices["close"],

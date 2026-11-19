@@ -68,10 +68,10 @@ def run_quality_checks(settings: Settings, store: Store, run_id: str = "") -> pd
         exploded = st.assign(flag=st["quality_flags"].str.split(",")).explode("flag")
         exploded = exploded[exploded["flag"].fillna("") != ""]
         serious = exploded[~exploded["flag"].isin(["availability_estimated", "cost_of_revenue_zero"])]
-        counts = serious.groupby("flag")["ticker"].nunique().to_dict()
-        add("Cohérence des états financiers", "ok" if not counts else "warn",
-            "aucune anomalie" if not counts else
-            " ; ".join(f"{k} ({v} société(s))" for k, v in sorted(counts.items())))
+        by_flag = serious.groupby("flag")["ticker"].agg(lambda t: sorted(set(t))).to_dict()
+        add("Cohérence des états financiers", "ok" if not by_flag else "warn",
+            "aucune anomalie" if not by_flag else
+            " ; ".join(f"{k} : {', '.join(v[:8])}" for k, v in sorted(by_flag.items())))
         est = exploded[exploded["flag"] == "availability_estimated"]["ticker"].nunique()
         if est:
             add("Dates de publication", "warn", f"{est} société(s) sans date de dépôt : délai standard appliqué")

@@ -7,6 +7,7 @@
     bourse transform --full-refresh
     bourse demo                # pipeline complet avec des données SYNTHÉTIQUES (sans clé API) dans data_demo/
     bourse status              # état des derniers runs et de la qualité
+    bourse anomalies [MSFT]    # détail des incohérences détectées dans les états financiers
     bourse probe AAPL          # diagnostic : quels endpoints votre plan FMP autorise
     bourse datasets            # liste des jeux de données FMP ingérés
 """
@@ -50,6 +51,8 @@ def main(argv: list[str] | None = None) -> int:
     p_demo.add_argument("--data-dir", default=None, help="dossier cible (défaut : data_demo/)")
 
     sub.add_parser("status", help="derniers runs & contrôles qualité")
+    p_ano = sub.add_parser("anomalies", help="détail des anomalies détectées dans les états financiers")
+    p_ano.add_argument("tickers", nargs="*")
     p_probe = sub.add_parser("probe", help="teste chaque endpoint FMP pour un ticker (diagnostic de plan)")
     p_probe.add_argument("ticker", nargs="?", default="AAPL")
     sub.add_parser("datasets", help="liste des jeux de données")
@@ -78,6 +81,25 @@ def main(argv: list[str] | None = None) -> int:
         return _probe(settings, args.ticker.upper())
 
     store = Store(settings.data_dir)
+
+    if args.command == "anomalies":
+        import pandas as pd
+
+        st = store.read("core", "financial_statements")
+        if st.empty:
+            print("Aucun état financier en base.")
+            return 0
+        st = st[st["quality_flags"].fillna("").str.replace("availability_estimated", "").str.strip(",") != ""]
+        if args.tickers:
+            st = st[st["ticker"].isin([t.upper() for t in args.tickers])]
+        cols = ["ticker", "period_type", "period_end", "quality_flags", "revenue", "cost_of_revenue", "gross_profit",
+                "total_assets", "total_liabilities", "total_equity", "total_equity_incl_minority",
+                "minority_interest", "operating_cash_flow"]
+        with pd.option_context("display.width", 250, "display.max_columns", 20, "display.float_format",
+                               lambda x: f"{x / 1e9:,.2f}Md"):
+            print(st[[c for c in cols if c in st.columns]].to_string(index=False) if not st.empty
+                  else "Aucune anomalie.")
+        return 0
 
     if args.command == "status":
         runs = store.read("ops", "pipeline_runs")
