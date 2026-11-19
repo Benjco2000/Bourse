@@ -76,7 +76,7 @@ with desc_col:
             st.caption("Description indisponible.")
         if summary.empty:
             st.caption("Le résumé « comment l'entreprise gagne de l'argent » généré par IA s'affichera ici une fois "
-                       "`ANTHROPIC_API_KEY` renseignée et le pipeline relancé.")
+                       "`OPENAI_API_KEY` renseignée et le pipeline relancé.")
 with seg_col:
     seg = data.for_symbol("core", "revenue_segments", sym, symbol_col="ticker")
     if seg.empty:

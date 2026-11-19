@@ -112,7 +112,9 @@ cap_buckets:
   large: 100000000000
 
 # --------------------------------------------------------------------------- Textes générés par IA
-# Clé : ANTHROPIC_API_KEY dans .env. Sans clé, aucun texte IA n'est généré (seuls les textes sourcés sont affichés).
+# provider: openai (clé OPENAI_API_KEY) ou anthropic (clé ANTHROPIC_API_KEY), dans .env.
+# Sans clé, aucun texte IA n'est généré (seuls les textes sourcés sont affichés).
 llm:
   enabled: true
-  model: claude-sonnet-5-5
+  provider: openai
+  model: gpt-6-luna      # modèle économique d'OpenAI ; "gpt-6.2-sol" pour plus de qualité (plus cher)

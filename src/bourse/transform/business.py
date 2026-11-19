@@ -55,7 +55,7 @@ def _segments_text(seg: pd.DataFrame) -> tuple[str, int | None]:
 def build_business_summaries(store: Store, llm: LLM | None) -> int:
     existing = store.read("gold", "business_summaries")
     if llm is None:
-        log.info("Résumés IA : aucune clé ANTHROPIC_API_KEY, étape ignorée")
+        log.info("Résumés IA : aucune clé LLM (OPENAI_API_KEY / ANTHROPIC_API_KEY), étape ignorée")
         return len(existing)
     companies = store.read("core", "companies")
     segments = store.read("core", "revenue_segments")

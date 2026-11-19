@@ -63,3 +63,44 @@ def test_business_summaries_are_cached(demo_store):
     build_business_summaries(demo_store, llm)
     assert llm.calls == 4  # entrées inchangées -> aucun nouvel appel
     assert build_business_summaries(demo_store, None) == 4  # sans clé : on garde l'existant
+
+
+def test_make_llm_provider_selection(monkeypatch):
+    from bourse.llm import AnthropicLLM, OpenAILLM, make_llm
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert make_llm({"provider": "openai"}) is None
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    llm = make_llm({"provider": "openai", "model": "gpt-6-luna"})
+    assert isinstance(llm, OpenAILLM) and llm.model == "gpt-6-luna"
+    assert make_llm({"provider": "openai", "enabled": False}) is None
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "a-test")
+    assert isinstance(make_llm({"provider": "anthropic"}), AnthropicLLM)
+
+
+def test_openai_responses_parsing(monkeypatch):
+    from bourse import llm as llm_mod
+
+    captured = {}
+
+    class Resp:
+        status_code = 200
+        text = ""
+
+        @staticmethod
+        def json():
+            return {"status": "completed", "output": [
+                {"type": "reasoning", "summary": []},
+                {"type": "message", "content": [{"type": "output_text", "text": "Bonjour"}]}]}
+
+    def fake_post(url, headers, json, timeout):
+        captured.update(url=url, headers=headers, body=json)
+        return Resp()
+
+    monkeypatch.setattr(llm_mod.requests, "post", fake_post)
+    out = llm_mod.OpenAILLM("sk-test", "gpt-6-luna").complete("sys", "prompt")
+    assert out == "Bonjour"
+    assert captured["url"].endswith("/v1/responses")
+    assert captured["headers"]["Authorization"] == "Bearer sk-test"
+    assert captured["body"]["instructions"] == "sys" and captured["body"]["input"] == "prompt"

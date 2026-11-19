@@ -99,7 +99,7 @@ cp .env.example .env
 FMP_API_KEY=votre_cle_ici
 ```
 
-Optionnel : `ANTHROPIC_API_KEY=...` dans le même fichier active les textes générés par IA (résumé « comment
+Optionnel : `OPENAI_API_KEY=...` dans le même fichier (fournisseur choisi par `llm.provider` dans `settings.yaml` : `openai` ou `anthropic`) active les textes générés par IA (résumé « comment
 l'entreprise gagne de l'argent », puis synthèse des actualités). Ils sont générés pendant `bourse run`, mis en
 cache, et clairement étiquetés dans l'application. Sans cette clé, tout le reste fonctionne.
 

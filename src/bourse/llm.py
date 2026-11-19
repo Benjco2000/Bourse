@@ -1,6 +1,7 @@
-"""Client LLM isolé (API Anthropic Messages, via HTTP) — utilisé pour les textes générés par IA.
+"""Clients LLM isolés (OpenAI Responses API ou Anthropic Messages API, via HTTP) pour les textes générés par IA.
 
-Sans clé `ANTHROPIC_API_KEY`, aucune génération n'a lieu : l'application n'affiche alors que les
+Fournisseur choisi par `llm.provider` dans config/settings.yaml. Sans la clé correspondante
+(`OPENAI_API_KEY` ou `ANTHROPIC_API_KEY`), aucune génération n'a lieu : l'application n'affiche alors que les
 textes sourcés. Les générations sont faites dans le pipeline (jamais au chargement d'une page) et
 mises en cache selon une empreinte des données d'entrée.
 """
@@ -51,11 +52,48 @@ class AnthropicLLM:
         return "".join(block.get("text", "") for block in data.get("content", []) if block.get("type") == "text")
 
 
+class OpenAILLM:
+    url = "https://api.openai.com/v1/responses"
+
+    def __init__(self, api_key: str, model: str, timeout: float = 90):
+        self.api_key = api_key
+        self.model = model
+        self.timeout = timeout
+
+    def complete(self, system: str, prompt: str, max_tokens: int = 800) -> str:
+        resp = requests.post(
+            self.url,
+            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+            # marge pour les tokens de raisonnement, comptés dans max_output_tokens
+            json={"model": self.model, "instructions": system, "input": prompt,
+                  "max_output_tokens": max_tokens * 3},
+            timeout=self.timeout,
+        )
+        if resp.status_code >= 400:
+            raise LLMError(f"HTTP {resp.status_code} : {resp.text[:200]}")
+        data = resp.json()
+        if data.get("output_text"):
+            return data["output_text"]
+        texts = [c.get("text", "") for item in data.get("output", []) if item.get("type") == "message"
+                 for c in item.get("content", []) if c.get("type") == "output_text"]
+        if not texts:
+            raise LLMError(f"réponse sans texte (statut {data.get('status')})")
+        return "".join(texts)
+
+
+DEFAULT_MODELS = {"openai": "gpt-6-luna", "anthropic": "claude-sonnet-5-5"}
+KEY_VARS = {"openai": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY"}
+
+
 def make_llm(settings_section: dict) -> LLM | None:
-    key = os.getenv("ANTHROPIC_API_KEY")
-    if not key or not settings_section.get("enabled", True):
+    if not settings_section.get("enabled", True):
         return None
-    return AnthropicLLM(key, settings_section.get("model", "claude-sonnet-5-5"))
+    provider = str(settings_section.get("provider", "openai")).lower()
+    key = os.getenv(KEY_VARS.get(provider, ""), "")
+    if not key:
+        return None
+    model = settings_section.get("model") or DEFAULT_MODELS[provider]
+    return OpenAILLM(key, model) if provider == "openai" else AnthropicLLM(key, model)
 
 
 def fingerprint(*parts: object) -> str:

@@ -106,10 +106,10 @@ niveau de qualité (`complete` / `partial` / `degraded`) avec ses explications, 
 (N/A « devises différentes ») plutôt que de mélanger des devises sans conversion.
 
 **P4 — Résumé IA « comment l'entreprise gagne de l'argent ».** Généré dans le pipeline (jamais à
-l'ouverture d'une page) par un LLM (API Anthropic, modèle configurable), uniquement à partir de la
+l'ouverture d'une page) par un LLM (OpenAI ou Anthropic selon `llm.provider`, modèle configurable), uniquement à partir de la
 description FMP et des segments publiés, avec consigne de ne rien inventer. Mis en cache par empreinte des
 entrées : il n'est régénéré que si la description, les segments ou le modèle changent. Affiché avec un
-badge « Généré par IA », séparé de la description sourcée. Sans clé `ANTHROPIC_API_KEY`, rien n'est généré.
+badge « Généré par IA », séparé de la description sourcée. Sans la clé du fournisseur (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`), rien n'est généré.
 
 **P5 — Concurrents.** Par défaut, le groupe de pairs de la configuration (3 au maximum) ; l'utilisateur
 peut les modifier, le choix est enregistré par société (`data/app/peer_overrides.json`) et réversible.
