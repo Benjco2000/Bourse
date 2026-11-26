@@ -32,14 +32,27 @@ def build_universe(settings: Settings, client: SupportsGet, path: Path | None = 
             f"Screener FMP indisponible ({exc}). Fournissez un CSV avec une colonne 'symbol' dans "
             f"{universe_path(settings)} (par ex. la liste du S&P 500 / Nasdaq-100)."
         ) from exc
-    df = pd.DataFrame(rows)
-    if df.empty:
+    raw = pd.DataFrame(rows)
+    if raw.empty:
         raise FMPError("Le screener n'a renvoyé aucune société.")
-    df = df.rename(columns={"companyName": "name", "marketCap": "market_cap",
-                            "exchangeShortName": "exchange"})
+    raw = raw.loc[:, ~raw.columns.duplicated()]
+
+    def pick(*names: str) -> pd.Series:
+        for n in names:
+            if n in raw.columns:
+                return raw[n]
+        return pd.Series(None, index=raw.index, dtype=object)
+
+    # L'API renvoie à la fois `exchange` (parfois le nom long) et `exchangeShortName` : on prend le code court
+    df = pd.DataFrame({
+        "symbol": pick("symbol"), "name": pick("companyName", "name"), "sector": pick("sector"),
+        "industry": pick("industry"), "exchange": pick("exchangeShortName", "exchange"),
+        "market_cap": pd.to_numeric(pick("marketCap", "market_cap"), errors="coerce"),
+    }).dropna(subset=["symbol"]).drop_duplicates("symbol")
     exchanges = set(cfg.get("exchanges") or [])
-    if exchanges and "exchange" in df.columns:
-        df = df[df["exchange"].isin(exchanges)]
+    if exchanges:
+        short = df["exchange"].fillna("").astype(str).str.upper()
+        df = df[short.isin({e.upper() for e in exchanges}) | short.str.contains("|".join(exchanges), case=False)]
     keywords = [k.lower() for k in cfg.get("exclude_industry_keywords", [])]
     industry = df.get("industry", pd.Series("", index=df.index)).fillna("").str.lower()
     excluded = industry.map(lambda i: any(k in i for k in keywords))

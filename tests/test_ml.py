@@ -135,3 +135,26 @@ def test_ml_page_renders_with_model(ml_env, monkeypatch):
         at.run()
         assert not at.exception, [e.value for e in at.exception]
         assert len(at.tabs) == 2
+
+
+def test_universe_handles_duplicate_exchange_fields(tmp_path):
+    """Le screener FMP renvoie `exchange` (nom long) ET `exchangeShortName` : pas de colonnes dupliquées."""
+    raw = copy.deepcopy(get_settings().raw)
+    raw["ml"]["universe_file"] = str(tmp_path / "u.csv")
+    s = dataclasses.replace(get_settings(), raw=raw)
+
+    class Client:
+        calls = 0
+
+        def get(self, path, params=None):
+            return [
+                {"symbol": "AAA", "companyName": "A", "marketCap": 5e9, "sector": "Technology",
+                 "industry": "Software", "exchange": "NASDAQ Global Select", "exchangeShortName": "NASDAQ"},
+                {"symbol": "BBB", "companyName": "B", "marketCap": 9e9, "sector": "Financial Services",
+                 "industry": "Banks - Regional", "exchange": "New York Stock Exchange", "exchangeShortName": "NYSE"},
+                {"symbol": "CCC", "companyName": "C", "marketCap": 3e9, "sector": "Industrials",
+                 "industry": "Aerospace", "exchange": "OTC", "exchangeShortName": "OTC"},
+            ]
+
+    df = build_universe(s, Client())
+    assert df["symbol"].tolist() == ["AAA"]
