@@ -36,7 +36,14 @@ for widget, key in (("fmp_api_key", "fmp-api-key"), ("openai_api_key", "openai-a
     if value:
         w.secrets.put_secret(scope=SCOPE, key=key, string_value=value)
         print(f"Secret « {key} » enregistré")
-print("Secrets présents :", [s.key for s in w.secrets.list_secrets(scope=SCOPE)])
+present = [s.key for s in w.secrets.list_secrets(scope=SCOPE)]
+print("Secrets présents :", present)
+if "fmp-api-key" not in present:
+    raise ValueError(
+        "Clé FMP absente : saisissez-la dans le champ « Clé FMP » en haut du notebook "
+        "(au premier « Run all », les champs viennent d'être créés et sont vides), "
+        "puis relancez le notebook."
+    )
 
 # COMMAND ----------
 

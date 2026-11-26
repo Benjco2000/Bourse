@@ -36,7 +36,9 @@ Le code est le même qu'en local : `BOURSE_ENV=databricks` active `config/settin
 ## 2. Installation (une fois) — notebook `databricks/notebooks/00_setup`
 
 1. Ouvrez le notebook, attachez-le au calcul **Serverless**.
-2. Remplissez les champs en haut : clé FMP, clé OpenAI (optionnel).
+2. Remplissez les champs en haut : clé FMP, clé OpenAI (optionnel). Les champs n'apparaissent qu'après
+   l'exécution de la première cellule : exécutez-la seule, saisissez les clés, puis lancez *Run all*. Sinon
+   le notebook s'arrête avec « Clé FMP absente » (les champs étaient encore vides).
 3. *Run all*. Le notebook crée le schéma `workspace.bourse`, le Volume `lake`, le secret scope `bourse`,
    enregistre les clés et teste l'accès à FMP et OpenAI.
 4. **Videz les champs des clés** (elles sont désormais dans le secret scope).
