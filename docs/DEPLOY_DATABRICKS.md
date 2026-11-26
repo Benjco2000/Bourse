@@ -54,10 +54,19 @@ Si le test FMP affiche « INACCESSIBLE », l'accès sortant est bloqué (voir §
 Depuis votre poste, avec la [CLI Databricks](https://docs.databricks.com/aws/en/dev-tools/cli/install) :
 
 ```powershell
-databricks auth login --host https://<votre-workspace>.cloud.databricks.com
-databricks fs cp -r data/bronze dbfs:/Volumes/workspace/bourse/lake/bronze
-databricks fs cp data/ops/ingestion_state.parquet dbfs:/Volumes/workspace/bourse/lake/ops/ingestion_state.parquet
+databricks auth login --host https://<votre-workspace>.cloud.databricks.com --profile bourse
+databricks current-user me --profile bourse   # vérifie que c'est le bon workspace
+databricks fs cp -r data/bronze dbfs:/Volumes/workspace/bourse/lake/bronze --profile bourse
+databricks fs mkdir dbfs:/Volumes/workspace/bourse/lake/ops --profile bourse
+databricks fs cp data/ops/ingestion_state.parquet dbfs:/Volumes/workspace/bourse/lake/ops/ingestion_state.parquet --profile bourse
+databricks fs ls dbfs:/Volumes/workspace/bourse/lake --profile bourse   # doit lister bronze et ops
 ```
+
+- Un profil dédié (`--profile bourse`) évite d'utiliser un ancien profil expiré ou pointant vers un autre
+  workspace (« refresh token is invalid »).
+- Les chemins commencent par `dbfs:/Volumes/…` ; tout autre chemin vise la racine DBFS, désactivée en Free
+  Edition (« Public DBFS root is disabled »).
+- `fs cp` d'un fichier seul ne crée pas le dossier parent (« no such directory ») : d'où le `fs mkdir`.
 
 Puis lancez une fois le job quotidien (§ 4) : il reconstruit toutes les tables à partir du bronze et
 n'appelle l'API que pour ce qui n'est plus à jour.
