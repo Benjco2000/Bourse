@@ -39,6 +39,9 @@ Le code est le même qu'en local : `BOURSE_ENV=databricks` active `config/settin
 2. Remplissez les champs en haut : clé FMP, clé OpenAI (optionnel). Les champs n'apparaissent qu'après
    l'exécution de la première cellule : exécutez-la seule, saisissez les clés, puis lancez *Run all*. Sinon
    le notebook s'arrête avec « Clé FMP absente » (les champs étaient encore vides).
+   Un champ déjà créé garde sa valeur : modifier la valeur par défaut dans le code n'a aucun effet (et ne
+   mettez jamais de clé dans le code). Si le champ reste vide, `dbutils.widgets.removeAll()` puis relancez la
+   1re cellule, ou utilisez la CLI : `databricks secrets put-secret bourse fmp-api-key` (saisie masquée).
 3. *Run all*. Le notebook crée le schéma `workspace.bourse`, le Volume `lake`, le secret scope `bourse`,
    enregistre les clés et teste l'accès à FMP et OpenAI.
 4. **Videz les champs des clés** (elles sont désormais dans le secret scope).

@@ -42,7 +42,9 @@ if "fmp-api-key" not in present:
     raise ValueError(
         "Clé FMP absente : saisissez-la dans le champ « Clé FMP » en haut du notebook "
         "(au premier « Run all », les champs viennent d'être créés et sont vides), "
-        "puis relancez le notebook."
+        "puis relancez le notebook. Si le champ reste vide malgré la saisie : exécutez "
+        "dbutils.widgets.removeAll(), relancez la 1re cellule, saisissez la clé et appuyez sur Entrée — "
+        "ou enregistrez-la avec la CLI : databricks secrets put-secret bourse fmp-api-key"
     )
 
 # COMMAND ----------
