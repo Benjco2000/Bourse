@@ -22,6 +22,7 @@ pages = {
                 url_path="valorisation"),
         st.Page("views/news_sentiment.py", title="Actualités & sentiment", icon=":material/newspaper:",
                 url_path="actualites"),
+        st.Page("views/ml.py", title="Valorisation IA", icon=":material/model_training:", url_path="valorisation-ia"),
         st.Page("views/cash.py", title="Cash & actionnaires", icon=":material/payments:", url_path="cash"),
     ],
     "Bonus": [

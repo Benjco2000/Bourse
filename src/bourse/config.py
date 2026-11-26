@@ -122,4 +122,6 @@ def setup_logging() -> None:
         format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
         datefmt="%H:%M:%S",
     )
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    for noisy in ("urllib3", "alembic", "mlflow", "git"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+    os.environ.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")

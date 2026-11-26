@@ -231,33 +231,40 @@ def ttm_as_of(ttm: pd.DataFrame, ticker: str, as_of: pd.Timestamp | None = None)
 
 
 def build_market_cap(store: Store, statements: pd.DataFrame) -> pd.DataFrame:
+    """Capitalisation quotidienne : série FMP si disponible, sinon approximation cours × actions diluées."""
+    empty = pd.DataFrame(columns=["ticker", "date", "market_cap", "source"])
     prices = store.read("silver", "prices_daily")
-    if prices.empty:
-        return pd.DataFrame(columns=["ticker", "date", "market_cap", "source"])
-    px = pd.DataFrame({"ticker": prices["symbol"], "date": pd.to_datetime(prices["date"]), "close": prices["close"]})
     fmp = store.read("silver", "market_cap_history")
     out = []
-    for ticker, p in px.groupby("ticker"):
-        p = p.sort_values("date")
-        m = fmp[fmp["symbol"] == ticker] if not fmp.empty else pd.DataFrame()
-        if not m.empty and "market_cap" in m.columns:
-            mc = pd.DataFrame({"ticker": ticker, "date": pd.to_datetime(m["date"]), "market_cap": m["market_cap"],
-                               "source": "fmp_historical_market_cap"})
-            out.append(mc.dropna(subset=["market_cap"]).sort_values("date"))
-            continue
-        # Approximation : cours × actions diluées du dernier état publié à la date (point-in-time)
-        st = statements[(statements["ticker"] == ticker) & statements["shares_diluted"].notna()]
-        if st.empty:
-            continue
-        shares = st[["available_date", "shares_diluted"]].sort_values("available_date")
-        merged = pd.merge_asof(p, shares, left_on="date", right_on="available_date", direction="backward")
-        merged = merged.dropna(subset=["shares_diluted"])
-        out.append(pd.DataFrame({"ticker": ticker, "date": merged["date"],
-                                 "market_cap": merged["close"] * merged["shares_diluted"],
-                                 "source": "approx_close_x_diluted_shares"}))
+    fmp_tickers: set[str] = set()
+    if not fmp.empty and {"symbol", "market_cap"} <= set(fmp.columns):
+        mc = pd.DataFrame({"ticker": fmp["symbol"], "date": pd.to_datetime(fmp["date"]),
+                           "market_cap": pd.to_numeric(fmp["market_cap"], errors="coerce"),
+                           "source": "fmp_historical_market_cap"}).dropna(subset=["market_cap"])
+        mc = mc[mc["market_cap"] > 0]
+        fmp_tickers = set(mc["ticker"])
+        out.append(mc)
+    if not prices.empty:
+        px = pd.DataFrame({"ticker": prices["symbol"], "date": pd.to_datetime(prices["date"]),
+                           "close": prices["close"]})
+        for ticker, p in px.groupby("ticker"):
+            if ticker in fmp_tickers:
+                continue
+            # Approximation : cours × actions diluées du dernier état publié à la date (point-in-time)
+            st = statements[(statements["ticker"] == ticker) & statements["shares_diluted"].notna()] \
+                if not statements.empty else statements
+            if st.empty:
+                continue
+            shares = st[["available_date", "shares_diluted"]].sort_values("available_date")
+            merged = pd.merge_asof(p.sort_values("date"), shares, left_on="date", right_on="available_date",
+                                   direction="backward").dropna(subset=["shares_diluted"])
+            out.append(pd.DataFrame({"ticker": ticker, "date": merged["date"],
+                                     "market_cap": merged["close"] * merged["shares_diluted"],
+                                     "source": "approx_close_x_diluted_shares"}))
     if not out:
-        return pd.DataFrame(columns=["ticker", "date", "market_cap", "source"])
-    return pd.concat(out, ignore_index=True).drop_duplicates(["ticker", "date"], keep="last")
+        return empty
+    df = pd.concat(out, ignore_index=True).drop_duplicates(["ticker", "date"], keep="last")
+    return df.sort_values(["ticker", "date"]).reset_index(drop=True)
 
 
 def build_segments(store: Store) -> pd.DataFrame:

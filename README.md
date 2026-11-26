@@ -5,7 +5,7 @@ Application d'analyse boursière inspirée de GrahamInvest, alimentée par l'API
 
 Pages principales : **Vue globale** (fiche, 7 KPIs, concurrents), **Historique de valorisation**
 (5 multiples point-in-time), **Actualités & sentiment**, **Cash & actionnaires** (de l'OCF au cash
-actionnaire). La page **Valorisation IA** (modèle ML) est en cours. Pages « Bonus » (version initiale) :
+actionnaire). **Valorisation IA** (P/FCF estimé par Machine Learning). Pages « Bonus » (version initiale) :
 
 - **Résumé** : cours, verdict de valorisation, juste valeur, marge de sécurité, critères de Graham, notes sur 100 ;
 - **Valorisation** : nombre de Graham, formule révisée de Graham, DCF, multiple de P/E historique (+ DCF FMP
@@ -177,7 +177,40 @@ partiel)**. Ajustez `api.requests_per_minute` dans `settings.yaml` selon votre p
 
 ---
 
-## 4. Méthodologie (résumé)
+## 4. Valorisation IA (Machine Learning)
+
+Le modèle est entraîné sur un **univers séparé** (~1 000 grandes capitalisations US, plan Starter = US
+uniquement), stocké dans `data/ml`, et suivi avec **MLflow** (local).
+
+```bash
+pip install -e ".[dev]"          # inclut scikit-learn et mlflow (ou ".[ml]")
+bourse ml universe               # 1 appel : écrit config/universe_ml.csv (screener FMP, hors banques/assurances/REIT)
+bourse ml ingest --limit 50      # conseillé d'abord : test sur 50 sociétés
+bourse ml ingest                 # ~8 000 appels (~30 min à 300/min) ; relançable, reprend où il s'est arrêté
+bourse ml dataset                # dataset point-in-time (fiche : data/ml/gold/ml_dataset_card.json)
+bourse ml train                  # compare baseline / Ridge / RF / HGB, enregistre une version MLflow
+bourse ml predict                # applique le modèle champion aux 10 sociétés de l'app
+# ou tout d'un coup :
+bourse ml all
+```
+
+| Commande | Effet |
+|---|---|
+| `bourse ml models` | versions enregistrées, champion, erreur de test |
+| `bourse ml promote 2` | revenir à (ou choisir) la version 2 |
+| `bourse ml train --no-promote` | entraîner sans changer le champion |
+| `bourse ml ui` | affiche la commande pour ouvrir l'interface MLflow (`mlflow ui --backend-store-uri ...`) |
+
+Ensuite, `bourse run` met à jour chaque jour les prédictions avec le champion (sans réentraîner). Réentraîner
+quand l'univers ou les données ont significativement changé (par ex. une fois par mois ou par trimestre).
+
+Garde-fous : le modèle est déclaré **non exploitable** (aucun prix affiché) s'il a moins de 5 000
+observations d'entraînement, moins de 300 sociétés, ou s'il ne bat pas la baseline sur le test. Détails :
+`docs/DECISIONS.md` (section Machine Learning). Passage au cloud : `docs/ROADMAP_PRODUCTION.md`.
+
+---
+
+## 4 bis. Méthodologie (résumé)
 
 - **Juste valeur composite** = médiane des méthodes disponibles parmi `composite_methods`
   (nombre de Graham, formule de Graham, DCF, P/E historique). Le DCF de FMP est affiché à titre indicatif.

@@ -8,7 +8,7 @@ pytest.importorskip("streamlit")
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
 APP = str(Path(__file__).resolve().parents[1] / "app" / "streamlit_app.py")
-PAGES = ["views/overview.py", "views/valuation.py", "views/news_sentiment.py", "views/cash.py", "views/home.py", "views/stock.py", "views/screener.py", "views/watchlist.py", "views/news.py",
+PAGES = ["views/overview.py", "views/valuation.py", "views/news_sentiment.py", "views/ml.py", "views/cash.py", "views/home.py", "views/stock.py", "views/screener.py", "views/watchlist.py", "views/news.py",
          "views/earnings.py", "views/pipeline.py"]
 
 

@@ -94,6 +94,7 @@ class FakeFMPClient:
             "most-actives": lambda s, p: self._movers(0), "news/general-latest": lambda s, p: self._general_news(),
             "earnings-calendar": lambda s, p: self._earnings(), "treasury-rates": lambda s, p: self._treasury(),
             "sp500-constituent": lambda s, p: [],
+            "company-screener": lambda s, p: self._screener(p),
             "historical-market-capitalization": self._market_cap, "stock-peers": self._peers,
             "revenue-product-segmentation": lambda s, p: self._segments(s, p, "product"),
             "revenue-geographic-segmentation": lambda s, p: self._segments(s, p, "geo"),
@@ -101,6 +102,22 @@ class FakeFMPClient:
         if handler is None:
             return []
         return handler(sym, p)
+
+    def _screener(self, p: dict) -> list[dict]:
+        """Univers fictif : 60 « sociétés » + les 10 tickers du MVP, dont 4 banques (exclues par la config)."""
+        syms = ["MSFT", "AAPL", "GOOGL", "META", "KO", "PEP", "PG", "V", "MA", "AXP"] + \
+            [f"DM{i:02d}" for i in range(60)]
+        rows = []
+        for i, sym in enumerate(syms):
+            c = self._company(sym)
+            industry = "Banks - Regional" if i % 17 == 3 else c["industry"]
+            rows.append({"symbol": sym, "companyName": f"{sym} Demo Corp.", "marketCap": self._price(sym) *
+                         self._fundamentals(sym, self.today.year - 1)["shares"], "sector": c["sector"],
+                         "industry": industry, "exchangeShortName": "NASDAQ", "country": "US", "isEtf": False,
+                         "isFund": False, "isActivelyTrading": True})
+        mc_min = float(p.get("marketCapMoreThan", 0))
+        rows = [r for r in rows if r["marketCap"] >= mc_min]
+        return rows[: int(p.get("limit", 1000))]
 
     def _profile(self, sym: str, p: dict) -> list[dict]:
         c = self._company(sym)

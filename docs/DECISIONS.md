@@ -149,3 +149,53 @@ La SBC n'est pas dans la cascade (charge non décaissée) : « FCF après SBC »
 indicateur analytique. Effet des rachats : actions rachetées ≈ montant / cours moyen de l'exercice,
 comparé à la variation nette des actions diluées moyennes ; l'écart approxime les émissions.
 Rendements (dividende, rachats) calculés sur la capitalisation actuelle : indicatifs pour une période passée.
+
+## Machine Learning (page 4)
+
+**M1 — Univers d'entraînement.** Le plan FMP Starter ne couvre que les actions US (CAC 40, Nikkei… exigent le
+plan Ultimate). Univers = screener FMP : actions US actives (NYSE, NASDAQ), capitalisation > 2 Md$, les 1 000
+plus grandes, hors banques, assurances, REIT, gestion d'actifs (le P/FCF n'y a pas de sens économique), plus
+les sociétés suivies dans l'application. Liste figée dans `config/universe_ml.csv` (versionnable). Repli : CSV
+fourni à la main si le screener est indisponible.
+
+**M2 — Lac ML séparé** (`data/ml`) : mêmes couches et même code que l'application, limité aux jeux de données
+utiles (profil, états financiers annuels et trimestriels, capitalisation historique) pour maîtriser le quota.
+
+**M3 — Dataset point-in-time.** Observation = (société, fin de trimestre t). Features = les 7 KPIs calculés
+par la même fonction que la page 1, avec uniquement les états publiés au plus tard à t ; un KPI « 5 ans »
+calculé sur moins de 5 ans, ou une variation d'actions suspecte (split), devient manquant. + secteur et
+tranche de capitalisation à t. Cible = log(P/FCF) observé à t (capitalisation(t) / FCF TTM publié). Exclusions
+comptées dans la fiche du dataset : FCF ≤ 0 (cible non définie), P/FCF hors [1 ; 150], TTM périmé, moins de
+4 KPIs.
+
+**M4 — Protocole d'évaluation.** Split chronologique train (≤ 2020) / validation (2021 S2 – 2022) / test
+(≥ 2023 S2), avec 6 mois d'embargo entre blocs (les fenêtres de 5 ans se recouvrent fortement d'un trimestre à
+l'autre). 20 % des sociétés sont exclues de l'entraînement et évaluées sur la période de test (« sociétés
+jamais vues »). Repli par quantiles de dates si l'historique ne couvre pas les dates configurées.
+Sélection sur la validation (MedAE du multiple), un modèle plus simple à moins de 2 % est préféré ; le
+test n'est utilisé qu'une fois. Modèle final réentraîné sur train + validation.
+
+**M5 — Candidats.** Baseline = médiane par secteur × taille ; Ridge ; Random Forest ; HistGradientBoosting,
+chacun sans puis avec variables de segment ; modèle par secteur uniquement si un secteur dépasse
+`min_sector_obs` observations. Robustesse : cible en log, winsorisation des features aux quantiles 1–99 %
+apprise sur l'entraînement, valeurs manquantes imputées (avec indicateur) ou gérées nativement (HGB).
+
+**M6 — Incertitude et explications.** Fourchette 80 % = quantiles 10/90 % des résidus de validation (en
+log), couverture mesurée sur le test. Importance globale = permutation sur le test. Explication locale =
+effet de chaque KPI par rapport à la médiane d'entraînement, toutes choses égales par ailleurs (association,
+pas causalité).
+
+**M7 — Garde-fous.** Modèle « non exploitable » (aucun prix affiché) si < 5 000 observations
+d'entraînement, < 300 sociétés, ou pas meilleur que la baseline sur le test. Par société : pas de prix si FCF
+≤ 0, moins de 5 KPIs calculables, secteur absent de l'entraînement ou ≥ 2 KPIs hors de la plage 1–99 %.
+
+**M8 — Cycle de vie.** MLflow local (sqlite + dossier d'artefacts) : paramètres, métriques de tous les
+candidats, version du code, période, features, fiche du dataset, artefacts (comparaison, importance,
+prédictions de test). Chaque entraînement crée une version du modèle `bourse_pfcf` ; l'alias `champion` est
+déplacé si le test est meilleur (ou forcé / empêché) ; `bourse ml promote <v>` permet le retour arrière.
+« Déploiement » = prédictions batch (`gold.ml_predictions`) recalculées à chaque `bourse run`, et
+`load_model()` dans l'application pour le simulateur. Sérialisation cloudpickle (modèles produits localement
+par ce pipeline uniquement).
+
+**M9 — Biais connus.** Survivant (univers = sociétés cotées aujourd'hui), classification sectorielle actuelle
+appliquée au passé, cible = niveau de valorisation du marché (et non valeur intrinsèque).

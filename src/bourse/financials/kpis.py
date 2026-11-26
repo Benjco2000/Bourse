@@ -47,6 +47,7 @@ class KPIResult:
     explanation: str
     note: str | None = None
     history: list[tuple[int, float]] = field(default_factory=list)
+    short_history: bool = False  # calculé sur moins d'années que la fenêtre demandée
 
     def as_row(self, ticker: str) -> dict[str, Any]:
         d = asdict(self)
@@ -66,7 +67,7 @@ def _status(value: float | None, threshold: float, direction: str, warning: bool
 
 def _make(kpi_id: str, cfg: dict[str, Any], value: m.Value, period: str, warning: bool = False,
           note: str | None = None, history: list[tuple[int, float]] | None = None,
-          force_status: str | None = None) -> KPIResult:
+          force_status: str | None = None, short: bool = False) -> KPIResult:
     label, unit, expl = KPI_META[kpi_id]
     c = cfg.get(kpi_id, {})
     thr, direction = float(c.get("threshold", 0)), c.get("direction", "higher")
@@ -76,7 +77,7 @@ def _make(kpi_id: str, cfg: dict[str, Any], value: m.Value, period: str, warning
         if not any(w in value.note for w in ("manquant", "indisponible")):
             status = "warning"
     return KPIResult(kpi_id, label, unit, value.value, status, thr, direction, period, expl,
-                     note or value.note, history or [])
+                     note or value.note, history or [], short)
 
 
 def _span(annual: pd.DataFrame, field_name: str, lookback: int) -> tuple[pd.Series | None, pd.Series | None, int]:
@@ -117,7 +118,7 @@ def compute_kpis(annual: pd.DataFrame, ttm: pd.Series | None, latest_balance: pd
         short = years < min_years
         out.append(_make(kpi_id, cfg, v, period, warning=short,
                          note=f"historique de {years} ans seulement (< {lookback})" if short and v.ok else None,
-                         history=hist(annual[col])))
+                         history=hist(annual[col]), short=short))
 
     # 3. Variation du nombre d'actions
     start, end, years = _span(annual, "shares_diluted", lookback)
@@ -130,7 +131,7 @@ def compute_kpis(annual: pd.DataFrame, ttm: pd.Series | None, latest_balance: pd
         out.append(_make("share_change_5y", cfg, v, f"FY{int(start['fiscal_year'])}→FY{int(end['fiscal_year'])}",
                          warning=short or atypical,
                          note=v.note or (f"historique de {years} ans seulement" if short else None),
-                         history=hist(annual["shares_diluted"])))
+                         history=hist(annual["shares_diluted"]), short=short))
 
     # 4. ROCE moyen
     roces = []
@@ -147,7 +148,7 @@ def compute_kpis(annual: pd.DataFrame, ttm: pd.Series | None, latest_balance: pd
         short = len(valid) < min_years
         out.append(_make("roce_avg_5y", cfg, m.Value(float(valid["roce"].mean())), period, warning=short,
                          note=f"moyenne sur {len(valid)} exercice(s) valide(s)" if short else None,
-                         history=hist(roce_series)))
+                         history=hist(roce_series), short=short))
 
     # 5. Dette nette / FCF (bilan le plus récent, FCF TTM)
     ttm_label = _ttm_label(ttm)

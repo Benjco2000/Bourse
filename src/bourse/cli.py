@@ -8,6 +8,8 @@
     bourse demo                # pipeline complet avec des données SYNTHÉTIQUES (sans clé API) dans data_demo/
     bourse status              # état des derniers runs et de la qualité
     bourse anomalies [MSFT]    # détail des incohérences détectées dans les états financiers
+    bourse ml all              # valorisation IA : univers -> ingestion -> dataset -> entraînement -> prédictions
+    bourse ml models           # versions du modèle ; `bourse ml promote 3` pour revenir à la v3
     bourse probe AAPL          # diagnostic : quels endpoints votre plan FMP autorise
     bourse datasets            # liste des jeux de données FMP ingérés
 """
@@ -51,6 +53,23 @@ def main(argv: list[str] | None = None) -> int:
     p_demo.add_argument("--data-dir", default=None, help="dossier cible (défaut : data_demo/)")
 
     sub.add_parser("status", help="derniers runs & contrôles qualité")
+    p_ml = sub.add_parser("ml", help="valorisation IA : univers, ingestion, dataset, entraînement, prédictions")
+    ml_sub = p_ml.add_subparsers(dest="ml_command", required=True)
+    ml_sub.add_parser("universe", help="construit config/universe_ml.csv via le screener FMP")
+    p_mi = ml_sub.add_parser("ingest", help="ingestion des données d'entraînement (lac data/ml)")
+    p_mi.add_argument("--limit", type=int, help="n'ingérer que les N premières sociétés (test)")
+    p_mi.add_argument("--force", action="store_true")
+    ml_sub.add_parser("dataset", help="construit le dataset point-in-time")
+    p_mt = ml_sub.add_parser("train", help="entraîne, évalue, enregistre le modèle (MLflow)")
+    p_mt.add_argument("--promote", action=argparse.BooleanOptionalAction, default=None,
+                      help="forcer (--promote) ou empêcher (--no-promote) la désignation comme champion")
+    ml_sub.add_parser("predict", help="applique le champion aux sociétés suivies (gold.ml_predictions)")
+    ml_sub.add_parser("models", help="liste les versions enregistrées")
+    p_mp = ml_sub.add_parser("promote", help="désigne une version comme champion (retour arrière)")
+    p_mp.add_argument("version")
+    p_ma = ml_sub.add_parser("all", help="universe (si absent) + ingest + dataset + train + predict")
+    p_ma.add_argument("--limit", type=int)
+    ml_sub.add_parser("ui", help="commande pour ouvrir l'interface MLflow")
     p_ano = sub.add_parser("anomalies", help="détail des anomalies détectées dans les états financiers")
     p_ano.add_argument("tickers", nargs="*")
     p_ano.add_argument("--all", action="store_true", help="inclure les signalements informatifs")
@@ -67,6 +86,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{d.name:28s} {d.scope:7s} {d.frequency:7s} /stable/{d.path}")
         return 0
 
+    if args.command == "ml":
+        return _ml(settings, args)
+
     if args.command == "demo":
         from .fmp.fake import FakeFMPClient
 
@@ -74,6 +96,7 @@ def main(argv: list[str] | None = None) -> int:
         settings.data_dir = data_dir
         store = Store(data_dir)
         result = run_pipeline(settings, store, client=FakeFMPClient(), force=True, demo=True)
+        _ml_demo(settings, store)
         print(f"\nDonnées de démonstration écrites dans {data_dir}")
         print(f"Lancez l'app : BOURSE_DATA_DIR={data_dir} streamlit run app/streamlit_app.py")
         return 0 if result["status"] != "failed" else 1
@@ -134,6 +157,87 @@ def main(argv: list[str] | None = None) -> int:
     if os.getenv("BOURSE_LOG_LEVEL", "INFO").upper() == "DEBUG":
         print(json.dumps(result, indent=2, default=str))
     return 0 if result["status"] != "failed" else 1
+
+
+def _ml_demo(settings, store: Store) -> None:
+    """Pipeline ML complet sur données synthétiques (univers fictif de 70 sociétés)."""
+    import copy
+    import dataclasses
+
+    try:
+        from .fmp.fake import FakeFMPClient
+        from .ml.dataset import write_dataset
+        from .ml.lake import ingest_ml, ml_store
+        from .ml.predict import run_predictions
+        from .ml.registry import load_model
+        from .ml.train import train
+        from .ml.universe import build_universe
+    except ImportError:
+        print("mlflow / scikit-learn non installés : démo ML ignorée (pip install -e \".[ml]\").")
+        return
+    raw = copy.deepcopy(settings.raw)
+    raw["ml"]["universe_file"] = str(settings.data_dir / "ml" / "universe_ml.csv")
+    s = dataclasses.replace(settings, raw=raw)
+    client = FakeFMPClient()
+    build_universe(s, client)
+    ingest_ml(s, client, force=True)
+    write_dataset(s, ml_store(s))
+    train(s, ml_store(s), promote=True)
+    run_predictions(s, store, load_model(s))
+
+
+def _ml(settings, args) -> int:
+    from .fmp.client import FMPError
+    from .pipeline import make_client
+
+    try:
+        from .ml import registry
+        from .ml.dataset import write_dataset
+        from .ml.lake import ingest_ml, ml_store
+        from .ml.predict import run_predictions
+        from .ml.train import train
+        from .ml.universe import build_universe, universe_path
+    except ImportError as exc:
+        print(f"Dépendances ML manquantes ({exc}) : pip install -e \".[ml]\"", file=sys.stderr)
+        return 2
+    cmd = args.ml_command
+    needs_api = cmd in ("universe", "ingest") or (cmd == "all")
+    if needs_api and not settings.api_key:
+        print("Erreur : FMP_API_KEY introuvable (.env).", file=sys.stderr)
+        return 2
+    try:
+        if cmd in ("universe",) or (cmd == "all" and not universe_path(settings).exists()):
+            df = build_universe(settings, make_client(settings))
+            print(f"{len(df)} sociétés dans {universe_path(settings)}")
+        if cmd in ("ingest", "all"):
+            ingest_ml(settings, make_client(settings), limit=args.limit, force=getattr(args, "force", False))
+        if cmd in ("dataset", "all"):
+            _, card = write_dataset(settings, ml_store(settings))
+            print(json.dumps({k: card[k] for k in ("n_rows", "n_companies", "period", "exclusions")},
+                             ensure_ascii=False, indent=2, default=str))
+        if cmd in ("train", "all"):
+            res = train(settings, ml_store(settings), promote=getattr(args, "promote", None))
+            print(json.dumps(res, ensure_ascii=False, indent=2, default=str))
+        if cmd in ("predict", "all"):
+            bundle = registry.load_model(settings)
+            if bundle is None:
+                print("Aucun modèle champion : lancez `bourse ml train`.", file=sys.stderr)
+                return 1
+            run_predictions(settings, Store(settings.data_dir), bundle)
+        if cmd == "models":
+            versions = registry.list_versions(settings)
+            print("\n".join(f"v{v['version']:>3} {'★ champion' if v['champion'] else '          '} "
+                            f"{v['model']:<36} test MedAE {v['test_medae'] or float('nan'):6.2f}  "
+                            f"exploitable={v['usable']}" for v in versions) or "Aucun modèle enregistré.")
+        if cmd == "promote":
+            registry.promote(settings, args.version)
+        if cmd == "ui":
+            uri = registry.configure(settings)
+            print(f"mlflow ui --backend-store-uri {uri}")
+    except (FMPError, FileNotFoundError, ValueError) as exc:
+        print(f"Erreur : {exc}", file=sys.stderr)
+        return 1
+    return 0
 
 
 def _probe(settings, ticker: str) -> int:

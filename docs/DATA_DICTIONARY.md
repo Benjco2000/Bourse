@@ -147,3 +147,28 @@ net_income, gross_profit, revenue` (TTM utilisés), `p_fcf, p_ocf, p_net_income,
 `ticker, window_start, window_end, n_articles, mean_score, score_class (positif | neutre | négatif),
 urls, status (ok | no_llm | insufficient | error), synthesis_json (thèmes, positifs, négatifs, risques,
 sentiment, confiance, article_urls), model, generated_at, input_hash`.
+
+## Lac ML (`data/ml`) — gold.ml_dataset
+
+| Champ | Description |
+|---|---|
+| ticker, date | Société, date d'observation (fin de trimestre) |
+| revenue_cagr_5y … fcf_margin_ttm | Les 7 KPIs calculés avec l'information publiée à `date` (vide si non fiable) |
+| sector, cap_bucket | Secteur (classification actuelle), tranche de capitalisation à `date` |
+| market_cap, fcf_ttm, ttm_period_end, ttm_method | Éléments de la cible |
+| pfcf, target | P/FCF observé ; `target` = log(P/FCF) |
+
+`gold/ml_dataset_card.json` : nombre d'observations et de sociétés, période, exclusions par motif,
+répartition par secteur et taille, taux de valeurs manquantes.
+
+## gold.ml_predictions (données de l'application)
+
+| Champ | Description |
+|---|---|
+| ticker, as_of, sector | Société et date des données utilisées |
+| model_version, model_trained_at, model_usable, predicted_at | Modèle (registre MLflow) |
+| status, status_reason | `ok`, `model_not_usable`, `insufficient_inputs`, `not_applicable` (FCF ≤ 0), `out_of_domain` |
+| pfcf_low, pfcf_mid, pfcf_high | P/FCF estimé (fourchette 80 %) |
+| price_low, price_mid, price_high | Prix théorique par action = P/FCF × FCF TTM / actions diluées (vide si non applicable) |
+| last_close, gap_vs_price, current_pfcf, market_cap, fcf_ttm, shares_diluted | Situation actuelle |
+| features, contributions, domain_issues | JSON : KPIs d'entrée, effet de chaque KPI, alertes de domaine |

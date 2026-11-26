@@ -22,7 +22,13 @@ app = [
     "streamlit>=1.40",
     "plotly>=5.20",
 ]
+ml = [
+    "scikit-learn>=1.5",
+    "mlflow>=3.0",
+]
 dev = [
+    "scikit-learn>=1.5",
+    "mlflow>=3.0",
     "pytest>=8",
     "ruff>=0.5",
     "streamlit>=1.40",

@@ -13,9 +13,9 @@ Référence : spécification produit (5 pages + pipeline ML). Avancement par lot
 | 5 | Page 2 — Historique de valorisation : 5 multiples quotidiens point-in-time, médiane / quartiles | ✅ |
 | 6 | Page 3 — Actualités & sentiment : ingestion news paginée, déduplication, score par article (LLM, repli lexical), synthèse LLM, historique | ✅ |
 | 7 | Page 5 — De l'OCF au cash actionnaire : cascade, SBC, rachats, dividendes, acquisitions | ✅ |
-| 8 | Pipeline ML : dataset temporel, baselines, Ridge / RF / HistGB, validation chronologique, MLflow, `load_model()`, page 4 | à faire |
+| 8 | Pipeline ML : univers US (screener), lac ML, dataset point-in-time, baselines, Ridge / RF / HistGB (avec / sans segments, par secteur), validation chronologique + sociétés jamais vues, MLflow + registre (champion / retour arrière), prédictions batch, page 4 | ✅ |
 | 9 | Durcissement : tests de bout en bout, UX, bandeau qualité, dépannage | à faire |
-| 10 | Préparation production : `docs/ROADMAP_PRODUCTION.md` (FMP Starter/Premium, GCP vs Databricks, coûts) | à faire |
+| 10 | Préparation production : `docs/ROADMAP_PRODUCTION.md` (FMP Starter/Premium, GCP vs Databricks, coûts) | ✅ (première version) |
 
 Les fonctionnalités existantes (critères de Graham, screener, watchlist) sont conservées dans une section
 « Bonus » de la navigation.

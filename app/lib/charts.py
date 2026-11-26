@@ -275,3 +275,31 @@ def article_counts(weekly: pd.DataFrame) -> go.Figure:
                            hovertemplate="Semaine du %{x|%d/%m/%Y} : %{y} article(s)<extra></extra>"))
     fig = _layout(fig, None, height=150, showlegend=False, hovermode="closest", margin=dict(l=8, r=8, t=10, b=8))
     return fig
+
+
+def contributions_bars(contrib: dict[str, float], labels: dict[str, str]) -> go.Figure:
+    """Effet de chaque KPI sur le multiple estimé (en points de P/FCF) : bleu = le relève, orange = l'abaisse."""
+    items = sorted(contrib.items(), key=lambda kv: abs(kv[1]))
+    fig = go.Figure(go.Bar(
+        y=[labels.get(k, k) for k, _ in items], x=[v for _, v in items], orientation="h",
+        marker=dict(color=[SERIES[0] if v >= 0 else SERIES[1] for _, v in items], cornerradius=4),
+        text=[f"{v:+.1f} x" for _, v in items], textposition="outside", cliponaxis=False,
+        hovertemplate="%{y} : %{x:+.2f} x<extra></extra>"))
+    fig.add_vline(x=0, line=dict(color=MUTED, width=1))
+    fig = _layout(fig, None, height=60 + 40 * len(items), showlegend=False, hovermode="closest",
+                  margin=dict(l=8, r=40, t=10, b=8))
+    fig.update_xaxes(ticksuffix=" x", gridcolor="rgba(128,128,128,0.15)")
+    fig.update_yaxes(showgrid=False)
+    return fig
+
+
+def importance_bars(imp: pd.DataFrame, labels: dict[str, str]) -> go.Figure:
+    d = imp.sort_values("importance")
+    fig = go.Figure(go.Bar(y=[labels.get(f, f) for f in d["feature"]], x=d["importance"], orientation="h",
+                           error_x=dict(type="data", array=d["std"], color=MUTED, thickness=1),
+                           marker=dict(color=SERIES[0], cornerradius=4),
+                           hovertemplate="%{y} : %{x:.4f}<extra></extra>"))
+    fig = _layout(fig, None, height=60 + 34 * len(d), showlegend=False, hovermode="closest",
+                  margin=dict(l=8, r=8, t=10, b=8))
+    fig.update_yaxes(showgrid=False)
+    return fig

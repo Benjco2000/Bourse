@@ -42,7 +42,9 @@ def test_news_pagination_and_initial_history(settings, store):
     run_ingestion(settings, store, Spy(today=date(2026, 11, 19)), datasets=["stock_news"], tickers=["KO"],
                   force=True)
     assert [p["page"] for p in seen] == [0, 1]  # 2e page incomplète -> arrêt
-    assert seen[0]["from"] == "2025-11-19"
+    from datetime import timedelta
+
+    assert seen[0]["from"] == (date.today() - timedelta(days=365)).isoformat()
 
 
 def _news_store(tmp_path) -> Store:

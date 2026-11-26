@@ -126,3 +126,40 @@ news:
   synthesis_max_articles: 40
   min_articles_for_synthesis: 3
   positive_threshold: 0.15      # score moyen > seuil -> positif ; < -seuil -> négatif ; sinon neutre
+
+# --------------------------------------------------------------------------- Valorisation IA (page 4)
+ml:
+  data_subdir: ml                     # lac de données ML séparé : data/ml/{bronze,silver,core,gold,ops}
+  universe_file: config/universe_ml.csv
+  universe:
+    # Plan Starter = actions US uniquement (CAC 40, Nikkei... exigent le plan Ultimate)
+    country: US
+    exchanges: [NYSE, NASDAQ]
+    min_market_cap: 2000000000        # 2 Md$
+    max_tickers: 1000                 # les plus grosses capitalisations
+    # P/FCF peu pertinent pour ces modèles économiques (bilan = outil de production) : exclus du dataset
+    exclude_industry_keywords: [Bank, Insurance, REIT, Mortgage, Asset Management, Capital Markets, Shell Companies]
+  datasets: [profile, income_statement_annual, income_statement_quarter, balance_sheet_annual,
+             balance_sheet_quarter, cash_flow_annual, cash_flow_quarter, market_cap_history]
+  observations:
+    start: "2012-12-31"               # première date d'observation (fin de trimestre)
+    max_ttm_age_days: 460
+  target:
+    min_pfcf: 1                       # P/FCF hors [1 ; 150] : exclus (comptés et documentés)
+    max_pfcf: 150
+  split:                              # chronologique, avec embargo entre les blocs
+    train_end: "2020-12-31"
+    val_start: "2021-07-01"
+    val_end: "2022-12-31"
+    test_start: "2023-07-01"
+    unseen_companies_share: 0.2       # part des sociétés exclues de l'entraînement (test « sociétés jamais vues »)
+  min_sector_obs: 1500                # modèles par secteur seulement au-delà de ce volume d'entraînement
+  usability:                          # en dessous : modèle "non exploitable", aucun prix affiché
+    min_train_obs: 5000
+    min_companies: 300
+    must_beat_baseline: true
+  simplicity_tolerance: 0.02          # un modèle plus simple à moins de 2 % du meilleur est préféré
+  registry:
+    model_name: bourse_pfcf
+    tracking_uri: ""                  # vide = sqlite local dans data/ml/mlflow.db ; "databricks" en phase 2
+    registry_uri: ""                  # vide = idem ; "databricks-uc" en phase 2

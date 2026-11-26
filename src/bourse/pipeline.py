@@ -41,6 +41,23 @@ def make_client(settings: Settings) -> FMPClient:
     )
 
 
+def _refresh_predictions(settings: Settings, store: Store) -> int | str:
+    """Applique le modèle champion s'il existe (mlflow installé et modèle entraîné)."""
+    try:
+        from .ml.predict import run_predictions
+        from .ml.registry import load_model
+    except ImportError:
+        return "mlflow non installé"
+    try:
+        bundle = load_model(settings)
+    except Exception as exc:  # registre absent ou illisible : le pipeline principal ne doit pas échouer
+        log.warning("Prédictions ML ignorées : %s", exc)
+        return "erreur"
+    if bundle is None:
+        return "aucun modèle"
+    return len(run_predictions(settings, store, bundle))
+
+
 def run_pipeline(settings: Settings, store: Store, client: SupportsGet | None = None,
                  steps: tuple[str, ...] = ALL_STEPS, tickers: list[str] | None = None,
                  datasets: list[str] | None = None, force: bool = False, full_refresh: bool = False,
@@ -70,6 +87,7 @@ def run_pipeline(settings: Settings, store: Store, client: SupportsGet | None = 
             llm = llm if llm is not None else (None if demo else make_llm(settings.section("llm")))
             summary["gold"]["business_summaries"] = build_business_summaries(store, llm)
             summary["gold"].update(build_news_layer(settings, store, resolve_universe(settings, store, tickers), llm))
+            summary["gold"]["ml_predictions"] = _refresh_predictions(settings, store)
         if "quality" in steps:
             qa = run_quality_checks(settings, store, run_id)
             summary["quality"] = qa["status"].value_counts().to_dict()
