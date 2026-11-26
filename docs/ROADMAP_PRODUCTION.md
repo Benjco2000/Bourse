@@ -4,7 +4,7 @@
 
 | Brique | Local aujourd'hui | Contrat déjà prévu pour la migration |
 |---|---|---|
-| Données | Parquet sous `data/` (app) et `data/ml/` (lac ML) | `bourse.storage.Store` : un seul point d'accès |
+| Données | Parquet sous `data/` (un seul lac : application + ML) | `bourse.storage.Store` : un seul point d'accès |
 | Orchestration | `bourse run` (quotidien) + `bourse ml all` (ponctuel) | commandes CLI idempotentes et relançables |
 | Suivi d'expériences / registre | MLflow local (sqlite `data/ml/mlflow.db`) | `ml.registry.tracking_uri` / `registry_uri` |
 | Modèle en production | alias MLflow `champion` + `gold.ml_predictions` | `load_model()` / `bourse ml promote <version>` |
@@ -13,7 +13,8 @@
 
 ## Faut-il migrer maintenant ?
 
-Non. Pour la V1 du modèle, rester en local :
+Statut (26/11/2026) : V1 validée en local, migration vers Databricks Free Edition préparée
+(`docs/DEPLOY_DATABRICKS.md`). Raisons initiales de commencer en local :
 
 - volume modeste : ~1 000 sociétés × 8 jeux de données ≈ 8 000 appels FMP (≈ 30 min à 300/min), quelques
   centaines de Mo de JSON bruts, quelques dizaines de Mo de Parquet ;

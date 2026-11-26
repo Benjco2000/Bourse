@@ -148,7 +148,7 @@ net_income, gross_profit, revenue` (TTM utilisés), `p_fcf, p_ocf, p_net_income,
 urls, status (ok | no_llm | insufficient | error), synthesis_json (thèmes, positifs, négatifs, risques,
 sentiment, confiance, article_urls), model, generated_at, input_hash`.
 
-## Lac ML (`data/ml`) — gold.ml_dataset
+## gold.ml_dataset — dataset d'entraînement (même lac que l'application)
 
 | Champ | Description |
 |---|---|

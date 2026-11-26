@@ -3,10 +3,8 @@
 
 universe:
   # Tickers suivis par le pipeline. Ajoutez/retirez librement.
-  # Budget API : ~19 appels par ticker au premier chargement, ~9 par ticker les jours suivants
-  # (les états financiers ne sont rafraîchis qu'une fois par semaine).
-  # Plan gratuit (250 appels/jour) : le premier chargement de 20 tickers s'étale sur 2 jours
-  # (le pipeline reprend automatiquement là où il s'est arrêté).
+  # Sociétés « suivies » : tous les jeux de données (~25 appels au premier chargement, ~12 par jour ensuite).
+  # Le pipeline reprend automatiquement là où il s'est arrêté si le quota est atteint.
   tickers:
     # MVP : 3 groupes de pairs (les concurrents affichés en page 1 sont dans l'univers)
     # Technologie / plateformes

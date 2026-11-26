@@ -2,7 +2,7 @@
 
 Référence : spécification produit (5 pages + pipeline ML). Avancement par lots, chacun livré testé.
 
-## Phase 1 — MVP : 10 sociétés via FMP, toutes les pipelines en place
+## Phase 1 — MVP : 10 sociétés suivies via FMP, toutes les pipelines en place
 
 | Lot | Contenu | Statut |
 |---|---|---|
@@ -19,6 +19,13 @@ Référence : spécification produit (5 pages + pipeline ML). Avancement par lot
 
 Les fonctionnalités existantes (critères de Graham, screener, watchlist) sont conservées dans une section
 « Bonus » de la navigation.
+
+Compléments réalisés après le lot 8 :
+
+| Lot | Contenu | Statut |
+|---|---|---|
+| 8 bis | Univers élargi dans l'application (~1 000 sociétés, jeu de données réduit), lac de données unique app + ML | ✅ |
+| 10 bis | Déploiement Databricks Free Edition : notebooks de jobs, bundle, app, registre Unity Catalog (`docs/DEPLOY_DATABRICKS.md`) | ✅ préparé, non testé sur un workspace réel |
 
 ## Phase 2 — Extension de l'univers
 

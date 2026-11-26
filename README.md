@@ -60,13 +60,25 @@ résultats** et une page **Données & pipeline** (historique des runs, contrôle
 │   ├── transform/silver.py     # bronze -> silver
 │   ├── core/normalize.py       # silver -> core (seul module qui connaît les champs FMP)
 │   ├── financials/             # KPIs, dette nette, ROCE, multiples (fonctions pures testées)
-│   ├── transform/kpis.py       # core -> gold.kpis
-│   ├── transform/gold.py       # silver -> gold (valorisation, Graham, notes)
+│   ├── financials/cash.py      # cascade OCF -> cash actionnaire, rachats (page 5)
+│   ├── transform/kpis.py       # core -> gold.kpis (7 KPIs)
+│   ├── transform/snapshot.py   # core -> gold.company_snapshot (capitalisation, TTM, P/S, P/OCF, P/FCF)
+│   ├── transform/valuation_history.py  # multiples quotidiens point-in-time (page 2)
+│   ├── transform/business.py   # résumé IA « comment l'entreprise gagne de l'argent »
+│   ├── transform/gold.py       # pages Bonus (valorisation Graham, notes, screener)
+│   ├── news.py                 # actualités : déduplication, sentiment, synthèse IA (page 3)
+│   ├── llm.py                  # clients LLM (OpenAI / Anthropic), isolés
+│   ├── ml/                     # univers, dataset point-in-time, entraînement, registre MLflow, prédictions
+│   ├── databricks.py           # amorçage des jobs, publication Delta, synchro de l'app
 │   ├── analytics/              # formules de valorisation et de notation (fonctions pures)
 │   ├── quality.py              # contrôles qualité
 │   ├── pipeline.py             # orchestration + journal des runs
 │   └── cli.py                  # commande `bourse`
 ├── app/streamlit_app.py        # application (pages dans app/views/)
+├── databricks/notebooks/       # notebooks des jobs Databricks (installation, quotidien, réentraînement)
+├── databricks.yml, app.yaml    # bundle (jobs + app) et configuration Databricks Apps
+├── config/settings*.yaml       # configuration (+ surcharge par environnement : settings.databricks.yaml)
+├── docs/                       # PLAN, DECISIONS, DATA_DICTIONARY, ROADMAP_PRODUCTION, DEPLOY_DATABRICKS
 ├── tests/                      # tests unitaires, pipeline de bout en bout, tests de fumée de l'app
 ├── Dockerfile                  # image unique app + pipeline (Cloud Run…)
 └── .github/workflows/ci.yml    # lint + tests à chaque push
@@ -85,7 +97,9 @@ Choix principaux :
 
 Documentation détaillée : [`docs/PLAN.md`](docs/PLAN.md) (avancement par lots),
 [`docs/DECISIONS.md`](docs/DECISIONS.md) (choix techniques et conventions financières),
-[`docs/DATA_DICTIONARY.md`](docs/DATA_DICTIONARY.md) (tables et définitions).
+[`docs/DATA_DICTIONARY.md`](docs/DATA_DICTIONARY.md) (tables et définitions),
+[`docs/ROADMAP_PRODUCTION.md`](docs/ROADMAP_PRODUCTION.md) (cible cloud),
+[`docs/DEPLOY_DATABRICKS.md`](docs/DEPLOY_DATABRICKS.md) (déploiement pas à pas).
 
 **Univers** : 10 sociétés **suivies** (toutes les données : actualités, analystes, cotation…) — MSFT, AAPL,
 GOOGL, META / KO, PEP, PG / V, MA, AXP — et un **univers élargi** d'environ 1 000 grandes capitalisations US
@@ -183,17 +197,18 @@ partiel)**. Ajustez `api.requests_per_minute` dans `settings.yaml` selon votre p
 
 ## 4. Valorisation IA (Machine Learning)
 
-Le modèle est entraîné sur un **univers séparé** (~1 000 grandes capitalisations US, plan Starter = US
-uniquement), stocké dans `data/ml`, et suivi avec **MLflow** (local).
+Le modèle est entraîné sur l'**univers élargi** (~1 000 grandes capitalisations US, plan Starter = US
+uniquement), dans le même lac de données que l'application, et suivi avec **MLflow** (registre local
+`data/ml/mlflow.db` ; Unity Catalog sur Databricks).
 
 ```bash
 pip install -e ".[dev]"          # inclut scikit-learn et mlflow (ou ".[ml]")
 bourse ml universe               # 1 appel : écrit config/universe_ml.csv (screener FMP, hors banques/assurances/REIT)
 bourse ml ingest --limit 50      # conseillé d'abord : test sur 50 sociétés
 bourse ml ingest                 # ~8 000 appels (~30 min à 300/min) ; relançable, reprend où il s'est arrêté
-bourse ml dataset                # dataset point-in-time (fiche : data/ml/gold/ml_dataset_card.json)
+bourse ml dataset                # dataset point-in-time (fiche : data/gold/ml_dataset_card.json)
 bourse ml train                  # compare baseline / Ridge / RF / HGB, enregistre une version MLflow
-bourse ml predict                # applique le modèle champion aux 10 sociétés de l'app
+bourse ml predict                # applique le modèle champion à toutes les sociétés de l'app
 # ou tout d'un coup :
 bourse ml all
 ```
@@ -204,6 +219,7 @@ bourse ml all
 | `bourse ml promote 2` | revenir à (ou choisir) la version 2 |
 | `bourse ml train --no-promote` | entraîner sans changer le champion |
 | `bourse ml ui` | affiche la commande pour ouvrir l'interface MLflow (`mlflow ui --backend-store-uri ...`) |
+| `bourse ml merge-lake` | récupère l'ancien lac séparé `data/ml` (versions antérieures) sans appel API |
 
 Le modèle utilise le même lac de données que l'application (les sociétés de l'univers élargi). Si vous
 aviez déjà ingéré l'univers dans l'ancien lac séparé `data/ml`, récupérez-le sans nouvel appel API :
@@ -237,29 +253,18 @@ des ratios faussés ; les banques/assurances se prêtent mal au DCF sur free cas
 
 ---
 
-## 5. Prochaines étapes (on les fera ensemble)
+## 5. Déploiement et prochaines étapes
 
-### Déploiement Databricks (Free Edition) : voir [`docs/DEPLOY_DATABRICKS.md`](docs/DEPLOY_DATABRICKS.md)
+**Databricks (Free Edition) — cible retenue** : pas à pas dans
+[`docs/DEPLOY_DATABRICKS.md`](docs/DEPLOY_DATABRICKS.md) (dossier Git, secret scope `bourse`, Volume Unity
+Catalog, jobs quotidien et mensuel, registre de modèles Unity Catalog, Databricks Apps).
 
-### Étape 2 — Planifier le pipeline chaque jour et héberger l'app (options)
+**Alternative GCP** (non implémentée) : image Docker fournie → Cloud Run Job `bourse run` + Cloud Scheduler,
+données sur un bucket GCS monté en volume, clés dans Secret Manager, application en Cloud Run Service.
+Comparaison : [`docs/ROADMAP_PRODUCTION.md`](docs/ROADMAP_PRODUCTION.md).
 
-Deux options, au choix :
-
-**Option A — GCP (la plus simple, aucun changement de code)**
-1. Bucket GCS pour les données, monté dans Cloud Run comme volume (`BOURSE_DATA_DIR=/data`).
-2. Clé FMP dans **Secret Manager**, injectée en variable d'environnement `FMP_API_KEY`.
-3. Image Docker (déjà fournie) poussée dans **Artifact Registry** (via Cloud Build).
-4. **Cloud Run Job** `bourse run` + **Cloud Scheduler** chaque soir après la clôture US (ex. 23h30 Paris).
-5. **Cloud Run Service** pour l'application (+ IAP ou authentification si vous voulez la garder privée).
-
-**Option B — Databricks**
-1. Clé dans un **secret scope** (`fmp-scope` / `fmp-api-key`, déjà géré par `bourse.config`).
-2. Données dans un **Volume Unity Catalog** (`BOURSE_DATA_DIR=/Volumes/<catalog>/<schema>/bourse`).
-3. **Job Databricks** quotidien qui exécute `bourse run` (wheel ou script), déployé avec un
-   **Databricks Asset Bundle** (`databricks.yml`).
-4. Gold publié aussi en **tables Delta** (SQL, Genie, dashboards) — on ajoutera un « writer » Delta.
-5. Application sur **Databricks Apps** (Streamlit supporté nativement), lisant via un SQL Warehouse — on ajoutera
-   un « reader » dans `app/lib/data.py`.
+**Restant du plan** : lot 9 « durcissement » (tests de bout en bout sur données réelles, finitions UX,
+guide de dépannage) — voir [`docs/PLAN.md`](docs/PLAN.md).
 
 ### Étape 3 — Industrialisation complémentaire (idées)
 - Alertes (e-mail/Slack) en cas de run en échec ou de contrôle qualité en erreur.
