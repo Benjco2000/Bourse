@@ -200,6 +200,9 @@ def train(settings: Settings, store: Store, promote: bool | None = None) -> dict
                                                                                      index=False)
             mlflow.log_artifacts(tmp)
         # cloudpickle : modèles produits par ce pipeline uniquement (pas de fichiers tiers chargés)
+        import warnings
+
+        warnings.filterwarnings("ignore", message="Saving scikit-learn models in the pickle")
         info = mlflow.sklearn.log_model(final, name="model", input_example=X[trva].head(5),
                                         serialization_format="cloudpickle")
         mv = mlflow.register_model(info.model_uri, name)
@@ -210,8 +213,7 @@ def train(settings: Settings, store: Store, promote: bool | None = None) -> dict
             current = client.get_model_version_by_alias(name, registry.CHAMPION)
         except Exception:
             pass
-        should_promote = promote if promote is not None else (
-            current is None or _better(client, current, test_m))
+        should_promote = promote if promote is not None else _should_promote(client, current, test_m, usable)
         if should_promote:
             client.set_registered_model_alias(name, registry.CHAMPION, mv.version)
         log.info("Modèle %s version %s enregistré%s — test MedAE %.2f x (baseline %.2f x) — %s", name, mv.version,
@@ -222,12 +224,24 @@ def train(settings: Settings, store: Store, promote: bool | None = None) -> dict
             **{k: meta[k] for k in ("usability", "test", "test_baseline", "test_unseen", "n_train")}}
 
 
-def _better(client, current, test_m: dict[str, float]) -> bool:
+def _should_promote(client, current, test_m: dict[str, float], usable: bool) -> bool:
+    """Règle de promotion automatique :
+    - pas de champion -> promotion ;
+    - un modèle NON exploitable ne remplace jamais un champion exploitable ;
+    - un modèle exploitable remplace un champion non exploitable ;
+    - sinon, promotion seulement si l'erreur de test est meilleure (comparaison indicative : les jeux de test
+      peuvent différer d'un entraînement à l'autre ; `bourse ml promote` permet de trancher à la main)."""
+    if current is None:
+        return True
     try:
-        prev = client.get_run(current.run_id).data.metrics.get("test_medae")
+        run = client.get_run(current.run_id)
+        prev_usable = run.data.tags.get("usable") == "True"
+        prev = run.data.metrics.get("test_medae")
     except Exception:
         return True
-    return prev is None or (test_m and test_m["medae"] < prev)
+    if prev_usable != usable:
+        return usable
+    return prev is None or bool(test_m and test_m["medae"] < prev)
 
 
 def _fresh(name: str, min_sector: int):

@@ -158,3 +158,20 @@ def test_universe_handles_duplicate_exchange_fields(tmp_path):
 
     df = build_universe(s, Client())
     assert df["symbol"].tolist() == ["AAA"]
+
+
+def test_promotion_rule():
+    from types import SimpleNamespace
+
+    from bourse.ml.train import _should_promote
+
+    def client(usable, medae):
+        run = SimpleNamespace(data=SimpleNamespace(tags={"usable": str(usable)}, metrics={"test_medae": medae}))
+        return SimpleNamespace(get_run=lambda run_id: run)
+
+    current = SimpleNamespace(run_id="r")
+    assert _should_promote(None, None, {"medae": 9}, False)
+    assert not _should_promote(client(True, 8), current, {"medae": 5}, False)   # jamais un modèle non exploitable
+    assert _should_promote(client(False, 4), current, {"medae": 9}, True)       # exploitable remplace non exploitable
+    assert _should_promote(client(True, 8), current, {"medae": 7}, True)
+    assert not _should_promote(client(True, 8), current, {"medae": 9}, True)

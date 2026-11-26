@@ -192,7 +192,10 @@ d'entraînement, < 300 sociétés, ou pas meilleur que la baseline sur le test. 
 **M8 — Cycle de vie.** MLflow local (sqlite + dossier d'artefacts) : paramètres, métriques de tous les
 candidats, version du code, période, features, fiche du dataset, artefacts (comparaison, importance,
 prédictions de test). Chaque entraînement crée une version du modèle `bourse_pfcf` ; l'alias `champion` est
-déplacé si le test est meilleur (ou forcé / empêché) ; `bourse ml promote <v>` permet le retour arrière.
+déplacé automatiquement selon une règle prudente : jamais vers un modèle non exploitable si le champion est
+exploitable, toujours vers un modèle exploitable si le champion ne l'est pas, sinon si l'erreur de test est
+meilleure (comparaison indicative, les jeux de test pouvant différer) — ou forcé / empêché (`--promote` /
+`--no-promote`) ; `bourse ml promote <v>` permet le retour arrière.
 « Déploiement » = prédictions batch (`gold.ml_predictions`) recalculées à chaque `bourse run`, et
 `load_model()` dans l'application pour le simulateur. Sérialisation cloudpickle (modèles produits localement
 par ce pipeline uniquement).

@@ -180,6 +180,14 @@ def build_dataset(settings: Settings, store: Store, end: pd.Timestamp | None = N
 
 def write_dataset(settings: Settings, store: Store) -> tuple[pd.DataFrame, dict[str, Any]]:
     df, report = build_dataset(settings, store)
+    from ..ingestion import resolve_universe
+
+    expected = len(resolve_universe(settings, store))
+    got = int(df["ticker"].nunique()) if not df.empty else 0
+    if expected >= 50 and got < 0.5 * expected or expected < 50 and got < 50:
+        log.warning("Le dataset ne couvre que %d sociétés (univers configuré : %d). Si vous avez ingéré l'univers "
+                    "élargi avec une version précédente (lac data/ml), lancez `bourse ml merge-lake` puis "
+                    "`bourse ml dataset`.", got, expected)
     card = {
         "built_at": utcnow().isoformat(), "n_rows": report.n_rows, "n_candidates": report.n_candidates,
         "exclusions": report.exclusions,
