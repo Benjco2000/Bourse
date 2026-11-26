@@ -153,6 +153,7 @@ ml:
     val_end: "2022-12-31"
     test_start: "2023-07-01"
     unseen_companies_share: 0.2       # part des sociétés exclues de l'entraînement (test « sociétés jamais vues »)
+  n_jobs: 0                           # processus pour construire le dataset (0 = nb de cœurs - 1)
   min_sector_obs: 1500                # modèles par secteur seulement au-delà de ce volume d'entraînement
   usability:                          # en dessous : modèle "non exploitable", aucun prix affiché
     min_train_obs: 5000
