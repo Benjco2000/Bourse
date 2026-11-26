@@ -151,9 +151,10 @@ def run_ingestion(settings: Settings, store: Store, client: SupportsGet,
                 if not df.empty and {ds.key_field, ds.date_field} <= set(df.columns):
                     last_dates[ds.name] = df.groupby(ds.key_field)[ds.date_field].max().to_dict()
 
+    # Ordre société par société : si le run s'interrompt (quota), les sociétés déjà traitées sont complètes
     tasks = []
-    for ds in per_symbol:
-        for sym in universe:
+    for sym in universe:
+        for ds in per_symbol:
             if is_fresh(ds, sym):
                 summary.skipped_fresh += 1
             else:
@@ -216,8 +217,8 @@ def _execute(tasks: list[tuple[Dataset, str]], settings: Settings, store: Store,
         except QuotaExceededError as exc:
             with lock:
                 if not summary.quota_exceeded:
-                    log.error("Quota FMP atteint : arrêt de l'ingestion. Relancez demain, le pipeline reprendra "
-                              "là où il s'est arrêté (%s)", exc)
+                    log.error("Quota FMP atteint (journalier ou bande passante) : arrêt de l'ingestion. Relancez plus "
+                              "tard, le pipeline reprendra là où il s'est arrêté (%s)", exc)
                 summary.quota_exceeded = True
             return
         except PlanRestrictedError as exc:

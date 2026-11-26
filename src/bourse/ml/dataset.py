@@ -74,8 +74,11 @@ def build_dataset(settings: Settings, store: Store, end: pd.Timestamp | None = N
     mc = store.read("core", "market_cap_daily")
     companies = store.read("core", "companies")
     report = DatasetReport()
-    if st.empty or mc.empty:
-        return pd.DataFrame(), report
+    if st.empty:
+        raise ValueError("Aucun état financier dans le lac ML : lancez `bourse ml ingest`.")
+    if mc.empty:
+        raise ValueError("Aucune capitalisation historique dans le lac ML (jeu `market_cap_history`) : "
+                         "relancez `bourse ml ingest` pour compléter le chargement.")
     sectors = dict(zip(companies.get("ticker", []), companies.get("sector", []), strict=False))
     end = end or mc["date"].max()
     dates = observation_dates(ml.get("observations", {}).get("start", "2012-12-31"), end)

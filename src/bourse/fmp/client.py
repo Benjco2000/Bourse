@@ -27,16 +27,23 @@ class PlanRestrictedError(FMPError):
 
 
 class QuotaExceededError(FMPError):
-    """Quota journalier atteint : inutile de réessayer avant demain."""
+    """Quota journalier / de bande passante atteint : inutile de réessayer avant le renouvellement."""
+
+
+class RateLimitedError(FMPError):
+    """Limite par minute atteinte : une pause d'une minute suffit."""
 
 
 class RateLimiter:
-    """Token bucket : `rate` requêtes par `per` secondes, partagé entre threads."""
+    """Token bucket : `rate` requêtes par `per` secondes, partagé entre threads.
 
-    def __init__(self, rate: int, per: float = 60.0):
-        self.capacity = max(1, rate)
+    Rafale limitée à quelques secondes de débit : FMP compte les appels sur une fenêtre glissante d'une
+    minute, une rafale initiale de `rate` appels épuiserait la fenêtre en quelques secondes."""
+
+    def __init__(self, rate: int, per: float = 60.0, burst: int | None = None):
+        self.capacity = max(1, burst if burst is not None else round(rate / per * 3))
         self.tokens = float(self.capacity)
-        self.fill_rate = self.capacity / per
+        self.fill_rate = max(1, rate) / per
         self.updated = time.monotonic()
         self.lock = threading.Lock()
 
@@ -55,7 +62,8 @@ class RateLimiter:
 
 class FMPClient:
     def __init__(self, api_key: str, base_url: str = "https://financialmodelingprep.com/stable",
-                 requests_per_minute: int = 250, timeout: float = 30, max_retries: int = 4):
+                 requests_per_minute: int = 250, timeout: float = 30, max_retries: int = 4,
+                 limit_pause_seconds: float = 61, max_limit_pauses: int = 3):
         if not api_key:
             raise FMPError(
                 "FMP_API_KEY manquante : copiez .env.example en .env et renseignez votre clé "
@@ -65,12 +73,33 @@ class FMPClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.max_retries = max_retries
-        self.limiter = RateLimiter(requests_per_minute)
+        # marge de 5 % sous le quota du plan
+        self.limiter = RateLimiter(max(1, int(requests_per_minute * 0.95)))
+        self.limit_pause_seconds = limit_pause_seconds
+        self.max_limit_pauses = max_limit_pauses
+        self._pause_lock = threading.Lock()
         self.session = requests.Session()
         self.calls = 0
         self._calls_lock = threading.Lock()
 
     def get(self, path: str, params: dict[str, Any] | None = None) -> Any:
+        """Appel avec gestion de « Limit Reach » : c'est d'abord la limite PAR MINUTE du plan ; on fait une pause
+        d'une minute et on réessaie. Si la limite persiste après plusieurs pauses, c'est un quota journalier ou
+        de bande passante : `QuotaExceededError`."""
+        for pause in range(self.max_limit_pauses + 1):
+            try:
+                return self._get_once(path, params)
+            except RateLimitedError as exc:
+                if pause >= self.max_limit_pauses:
+                    raise QuotaExceededError(f"{exc} (toujours atteinte après {pause} pause(s) d'une minute)") \
+                        from exc
+                with self._pause_lock:  # une seule pause partagée entre les threads
+                    log.warning("Limite FMP par minute atteinte (%s) : pause de %.0f s", path,
+                                self.limit_pause_seconds)
+                    time.sleep(self.limit_pause_seconds)
+        raise FMPError(f"{path}: échec inattendu")
+
+    def _get_once(self, path: str, params: dict[str, Any] | None = None) -> Any:
         url = f"{self.base_url}/{path.lstrip('/')}"
         query = {k: v for k, v in (params or {}).items() if v is not None}
         query["apikey"] = self.api_key
@@ -90,7 +119,7 @@ class FMPClient:
             if resp.status_code in (401, 402, 403):
                 raise PlanRestrictedError(f"{path}: HTTP {resp.status_code} — {resp.text[:200]}")
             if resp.status_code == 429 and "limit reach" in resp.text.lower():
-                raise QuotaExceededError(f"{path}: quota FMP atteint — {resp.text[:200]}")
+                raise RateLimitedError(f"{path}: limite FMP atteinte — {resp.text[:120]}")
             if resp.status_code == 429 or resp.status_code >= 500:
                 if attempt >= self.max_retries:
                     raise FMPError(f"{path}: HTTP {resp.status_code} après {attempt + 1} tentatives")
@@ -105,7 +134,7 @@ class FMPClient:
             if isinstance(data, dict) and ("Error Message" in data or "error" in data):
                 message = data.get("Error Message") or data.get("error")
                 if "limit reach" in str(message).lower():
-                    raise QuotaExceededError(f"{path}: {message}")
+                    raise RateLimitedError(f"{path}: limite FMP atteinte — {str(message)[:120]}")
                 if "plan" in str(message).lower() or "subscription" in str(message).lower():
                     raise PlanRestrictedError(f"{path}: {message}")
                 raise FMPError(f"{path}: {message}")

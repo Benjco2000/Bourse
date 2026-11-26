@@ -117,10 +117,11 @@ def test_quota_exceeded_stops_and_resumes(settings, store):
 
     first = Quota(today=date(2026, 11, 19))
     s1 = run_ingestion(settings, store, first)
-    assert s1.quota_exceeded and s1.fetched == 30
+    # un appel paginé (actualités) peut consommer 2 appels : ≈ 30 jeux récupérés
+    assert s1.quota_exceeded and 25 <= s1.fetched <= 30
     second = FakeFMPClient(today=date(2026, 11, 19))
     s2 = run_ingestion(settings, store, second)
-    assert s2.skipped_fresh >= 30 and not s2.quota_exceeded
+    assert s2.skipped_fresh >= s1.fetched and not s2.quota_exceeded
 
 
 def test_symbol_level_restriction_does_not_disable_dataset(settings, store):
@@ -228,3 +229,63 @@ def test_core_and_gold_restricted_to_current_universe(settings, demo_store):
     for layer, table, col in (("core", "financial_statements", "ticker"), ("core", "market_cap_daily", "ticker"),
                               ("gold", "kpis", "ticker"), ("gold", "valuation", "symbol")):
         assert set(demo_store.read(layer, table)[col]) == {"MSFT", "KO"}, table
+
+
+def _resp(status, payload, text=""):
+    class R:
+        status_code = status
+        headers: dict = {}
+
+        @staticmethod
+        def json():
+            return payload
+
+    R.text = text or str(payload)
+    return R()
+
+
+def test_client_pauses_on_per_minute_limit_then_succeeds(monkeypatch):
+    import bourse.fmp.client as client_mod
+
+    client = FMPClient(api_key="x", requests_per_minute=6000, limit_pause_seconds=0)
+    answers = iter([_resp(200, {"Error Message": "Limit Reach . Please upgrade your plan"}),
+                    _resp(200, [{"symbol": "KO"}])])
+    monkeypatch.setattr(client.session, "get", lambda *a, **k: next(answers))
+    sleeps = []
+    monkeypatch.setattr(client_mod.time, "sleep", lambda s: sleeps.append(s))
+    assert client.get("profile", {"symbol": "KO"}) == [{"symbol": "KO"}]
+    assert sleeps  # une pause a eu lieu
+
+
+def test_client_quota_after_repeated_limits(monkeypatch):
+    import bourse.fmp.client as client_mod
+
+    client = FMPClient(api_key="x", requests_per_minute=6000, limit_pause_seconds=0, max_limit_pauses=2)
+    monkeypatch.setattr(client.session, "get", lambda *a, **k: _resp(429, None, "Limit Reach"))
+    monkeypatch.setattr(client_mod.time, "sleep", lambda s: None)
+    with pytest.raises(QuotaExceededError):
+        client.get("profile", {"symbol": "KO"})
+
+
+def test_rate_limiter_has_no_full_minute_burst():
+    from bourse.fmp.client import RateLimiter
+
+    lim = RateLimiter(300)
+    assert lim.capacity == 15 and lim.fill_rate == 5
+
+
+def test_ingestion_orders_tasks_by_ticker(settings, store):
+    seen = []
+
+    class Spy(FakeFMPClient):
+        def get(self, path, params=None):
+            seen.append(params.get("symbol") or params.get("symbols"))
+            return super().get(path, params)
+
+    settings.raw["api"]["max_workers"] = 1
+    try:
+        run_ingestion(settings, store, Spy(today=date(2026, 11, 19)), tickers=["KO", "MSFT"],
+                      datasets=["profile", "quote", "dividends"], force=True)
+    finally:
+        settings.raw["api"]["max_workers"] = 8
+    assert seen == ["KO", "KO", "KO", "MSFT", "MSFT", "MSFT"]
