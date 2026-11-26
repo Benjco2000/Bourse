@@ -138,4 +138,6 @@ def setup_logging() -> None:
     )
     for noisy in ("urllib3", "alembic", "mlflow", "git"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
+    # avertissement attendu (modèles produits par ce pipeline, sérialisés en cloudpickle)
+    logging.getLogger("mlflow.sklearn").setLevel(logging.ERROR)
     os.environ.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")
