@@ -43,8 +43,8 @@ l'objectif est le coût minimal pour une petite application (Cloud Run facture �
 
 Mise en œuvre pour la Free Edition : [`DEPLOY_DATABRICKS.md`](DEPLOY_DATABRICKS.md). Récapitulatif :
 
-1. **Secrets** : `databricks secrets create-scope fmp-scope` puis clé `fmp-api-key` (déjà lue par
-   `bourse.config`), et une clé pour le LLM.
+1. **Secrets** : secret scope `bourse`, clés `fmp-api-key` et `openai-api-key` (créées par le notebook `00_setup`, lues par
+   `bourse.databricks.bootstrap`).
 2. **Stockage** : un Volume Unity Catalog (`/Volumes/<catalog>/bourse/lake`) comme `BOURSE_DATA_DIR` pour le
    bronze ; puis un « writer » Delta pour publier `core.*` et `gold.*` en tables Unity Catalog.
 3. **MLflow** : `ml.registry.tracking_uri: databricks`, `registry_uri: databricks-uc`,
