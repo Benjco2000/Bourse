@@ -177,6 +177,18 @@ with tab_model:
                 "Erreur relative médiane": st.column_config.NumberColumn(format="percent")})
         st.caption("Règle de choix : meilleure MedAE de validation ; un modèle plus simple à moins de 2 % est "
                    "préféré.")
+    mono = meta.get("monotonic_constraints")
+    if mono:
+        viol = meta.get("monotonicity_violations", {})
+        st.markdown("**Règles économiques imposées au modèle** (vérifiées après l'entraînement)")
+        st.dataframe(pd.DataFrame([{
+            "KPI": LABELS.get(f, f),
+            "Règle": {1: "↑ KPI ⇒ multiple ↑ ou =", -1: "↑ KPI ⇒ multiple ↓ ou =", 0: "libre"}[int(c)],
+            "Cas en infraction": fmt.pct(viol.get(f), 1) if f in viol else "—"} for f, c in mono.items()]),
+            hide_index=True, width="stretch")
+        st.caption("Contraintes de monotonie appliquées à l'entraînement (Gradient Boosting, Random Forest, Ridge "
+                   "à signes imposés) ; la vérification augmente chaque KPI d'un quart de sa plage et contrôle le sens "
+                   "de variation du multiple estimé. Modifiables dans `config/settings.yaml` (`ml.monotonic_constraints`).")
     imp = pd.DataFrame(meta.get("importance", []))
     if not imp.empty:
         st.markdown("**Importance des variables** (permutation sur le test : dégradation de l'erreur quand la "

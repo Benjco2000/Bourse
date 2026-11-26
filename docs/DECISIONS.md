@@ -180,6 +180,17 @@ chacun sans puis avec variables de segment ; modèle par secteur uniquement si u
 `min_sector_obs` observations. Robustesse : cible en log, winsorisation des features aux quantiles 1–99 %
 apprise sur l'entraînement, valeurs manquantes imputées (avec indicateur) ou gérées nativement (HGB).
 
+**M5 bis — Règles économiques (contraintes de monotonie).** Sans contrainte, le modèle apprenait des
+relations contre-intuitives (ex. plus de croissance du FCF ⇒ multiple plus bas), en partie mécaniques : la
+cible P/FCF et plusieurs KPIs partagent le FCF au dénominateur (un FCF qui vient de bondir fait à la fois
+monter sa croissance et baisser le P/FCF observé). On impose donc le sens économique : croissance du CA et du
+FCF, ROCE, marges ⇒ multiple ↑ ; dilution et dette nette / FCF ⇒ multiple ↓ (`ml.monotonic_constraints`).
+Mise en œuvre : `monotonic_cst` du Gradient Boosting et de la Random Forest ; Ridge à signes imposés
+(coefficients positifs sur des variables multipliées par leur signe, variables libres dédoublées en ±x).
+Vérification après chaque entraînement (variation d'un quart de la plage p1–p99 de chaque KPI) : plus de
+0,5 % d'infractions ⇒ modèle non exploitable. Contrepartie : une précision brute parfois légèrement
+inférieure, au profit d'estimations cohérentes et explicables.
+
 **M6 — Incertitude et explications.** Fourchette 80 % = quantiles 10/90 % des résidus de validation (en
 log), couverture mesurée sur le test. Importance globale = permutation sur le test. Explication locale =
 effet de chaque KPI par rapport à la médiane d'entraînement, toutes choses égales par ailleurs (association,

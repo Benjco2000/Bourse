@@ -228,8 +228,13 @@ aviez déjà ingéré l'univers dans l'ancien lac séparé `data/ml`, récupére
 Ensuite, `bourse run` met à jour chaque jour les données de l'univers élargi et les prédictions avec le champion (sans réentraîner). Réentraîner
 quand l'univers ou les données ont significativement changé (par ex. une fois par mois ou par trimestre).
 
+Règles économiques : le modèle est contraint pour que le multiple estimé monte avec la croissance, la
+rentabilité et les marges, et baisse avec la dilution et l'endettement (`ml.monotonic_constraints`) ; c'est
+vérifié après chaque entraînement.
+
 Garde-fous : le modèle est déclaré **non exploitable** (aucun prix affiché) s'il a moins de 5 000
-observations d'entraînement, moins de 300 sociétés, ou s'il ne bat pas la baseline sur le test. Détails :
+observations d'entraînement, moins de 300 sociétés, s'il ne bat pas la baseline sur le test ou s'il
+enfreint les règles économiques. Détails :
 `docs/DECISIONS.md` (section Machine Learning). Passage au cloud : `docs/ROADMAP_PRODUCTION.md`.
 
 ---

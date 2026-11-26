@@ -165,8 +165,10 @@ def test_promotion_rule():
 
     from bourse.ml.train import _should_promote
 
-    def client(usable, medae):
-        run = SimpleNamespace(data=SimpleNamespace(tags={"usable": str(usable)}, metrics={"test_medae": medae}))
+    def client(usable, medae, checked=True):
+        params = {"monotonic_constraints": "{}"} if checked else {}
+        run = SimpleNamespace(data=SimpleNamespace(tags={"usable": str(usable)}, metrics={"test_medae": medae},
+                                                   params=params))
         return SimpleNamespace(get_run=lambda run_id: run)
 
     current = SimpleNamespace(run_id="r")
@@ -175,3 +177,25 @@ def test_promotion_rule():
     assert _should_promote(client(False, 4), current, {"medae": 9}, True)       # exploitable remplace non exploitable
     assert _should_promote(client(True, 8), current, {"medae": 7}, True)
     assert not _should_promote(client(True, 8), current, {"medae": 9}, True)
+    assert _should_promote(client(True, 5, checked=False), current, {"medae": 9}, True)  # ancien champion sans règles
+
+
+def test_monotonic_constraints_hold_even_when_data_says_otherwise():
+    from bourse.ml.dataset import KPI_FEATURES
+    from bourse.ml.models import DEFAULT_MONOTONIC, make_candidates
+    from bourse.ml.train import check_monotonicity
+
+    rng = np.random.default_rng(0)
+    n = 1500
+    X = pd.DataFrame(rng.normal(size=(n, 7)), columns=KPI_FEATURES)
+    X["sector"] = rng.choice(["A", "B"], n)
+    X["cap_bucket"] = rng.choice(["large", "mega"], n)
+    X.loc[rng.random(n) < 0.1, "fcf_cagr_5y"] = np.nan
+    # relations « à l'envers » dans les données : croissance ↓ multiple, dilution ↑ multiple
+    y = -2 * X["revenue_cagr_5y"] + 2 * X["share_change_5y"] - X["fcf_cagr_5y"].fillna(0) + rng.normal(size=n)
+    domain = {f: {"p01": -2.3, "p99": 2.3, "median": 0.0} for f in KPI_FEATURES}
+    for seg in (False, True):
+        for name, model in make_candidates(seg).items():
+            model.fit(X, y)
+            viol = check_monotonicity(model, X, DEFAULT_MONOTONIC, domain)
+            assert max(viol.values()) == 0, (name, viol)

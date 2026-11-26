@@ -54,9 +54,27 @@ class GroupMedianBaseline(BaseEstimator, RegressorMixin):
         return np.asarray(out, dtype=float)
 
 
-def _preprocess(with_segments: bool, scale: bool, ordinal: bool) -> ColumnTransformer:
+# Contraintes de monotonie (règles économiques) : +1 = le multiple « juste » ne peut que monter quand le KPI
+# monte, -1 = ne peut que baisser, 0 = libre. Modifiables dans config/settings.yaml (ml.monotonic_constraints).
+DEFAULT_MONOTONIC = {
+    "revenue_cagr_5y": 1,     # croissance du CA : qualité ↑
+    "fcf_cagr_5y": 1,         # croissance du FCF : qualité ↑
+    "share_change_5y": -1,    # dilution : qualité ↓
+    "roce_avg_5y": 1,         # rentabilité du capital : qualité ↑
+    "net_debt_to_fcf": -1,    # endettement : qualité ↓
+    "gross_margin_ttm": 1,    # pouvoir de prix : qualité ↑
+    "fcf_margin_ttm": 1,      # conversion en cash : qualité ↑
+}
+
+
+def constraint_vector(constraints: dict[str, int] | None) -> list[int]:
+    c = DEFAULT_MONOTONIC | (constraints or {})
+    return [int(np.sign(c.get(f, 0))) for f in KPI_FEATURES]
+
+
+def _preprocess(with_segments: bool, scale: bool, ordinal: bool, indicator: bool = True) -> ColumnTransformer:
     num = Pipeline([("winsor", Winsorizer()),
-                    ("impute", SimpleImputer(strategy="median", add_indicator=True))]
+                    ("impute", SimpleImputer(strategy="median", add_indicator=indicator))]
                    + ([("scale", StandardScaler())] if scale else []))
     transformers = [("num", num, KPI_FEATURES)]
     if with_segments:
@@ -66,27 +84,57 @@ def _preprocess(with_segments: bool, scale: bool, ordinal: bool) -> ColumnTransf
     return ColumnTransformer(transformers, remainder="drop")
 
 
-def make_candidates(with_segments: bool) -> dict[str, BaseEstimator]:
+class SignConstrainedRidge(BaseEstimator, RegressorMixin):
+    """Ridge dont le signe des coefficients des KPIs est imposé (les autres colonnes restent libres).
+
+    Astuce : chaque colonne contrainte est multipliée par son signe, chaque colonne libre est dupliquée en
+    (x, -x), puis on ajuste une Ridge à coefficients positifs."""
+
+    def __init__(self, signs: list[int] | None = None, alpha: float = 3.0):
+        self.signs = signs
+        self.alpha = alpha
+
+    def _expand(self, X):
+        X = np.asarray(X.toarray() if hasattr(X, "toarray") else X, dtype=float)
+        signs = list(self.signs or []) + [0] * (X.shape[1] - len(self.signs or []))
+        cols = []
+        for j, sgn in enumerate(signs):
+            if sgn:
+                cols.append(sgn * X[:, j])
+            else:
+                cols += [X[:, j], -X[:, j]]
+        return np.column_stack(cols)
+
+    def fit(self, X, y):
+        self.model_ = Ridge(alpha=self.alpha, positive=True).fit(self._expand(X), y)
+        return self
+
+    def predict(self, X):
+        return self.model_.predict(self._expand(X))
+
+
+def make_candidates(with_segments: bool, constraints: dict[str, int] | None = None) -> dict[str, BaseEstimator]:
     suffix = "+segments" if with_segments else ""
-    hgb_kwargs = dict(max_iter=400, learning_rate=0.05, min_samples_leaf=40, l2_regularization=1.0,
-                      random_state=42)
+    mono = constraint_vector(constraints)
+    cats = [0] * len(CAT_FEATURES) if with_segments else []
     hgb_pre = ColumnTransformer(
         [("num", Winsorizer(), KPI_FEATURES)]
         + ([("cat", OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1,
                                    encoded_missing_value=-1), CAT_FEATURES)] if with_segments else []))
-    n_num = len(KPI_FEATURES)
-    cat_mask = [False] * n_num + ([True] * len(CAT_FEATURES) if with_segments else [])
+    cat_mask = [False] * len(KPI_FEATURES) + ([True] * len(CAT_FEATURES) if with_segments else [])
     return {
         f"ridge{suffix}": Pipeline([("pre", _preprocess(with_segments, scale=True, ordinal=False)),
-                                    ("model", Ridge(alpha=3.0))]),
-        f"random_forest{suffix}": Pipeline([("pre", _preprocess(with_segments, scale=False, ordinal=True)),
-                                            ("model", RandomForestRegressor(n_estimators=300, min_samples_leaf=20,
-                                                                            max_features=0.6, n_jobs=-1,
-                                                                            random_state=42))]),
+                                    ("model", SignConstrainedRidge(signs=mono, alpha=3.0))]),
+        f"random_forest{suffix}": Pipeline([
+            ("pre", _preprocess(with_segments, scale=False, ordinal=True, indicator=False)),
+            ("model", RandomForestRegressor(n_estimators=300, min_samples_leaf=20, max_features=0.6, n_jobs=-1,
+                                            random_state=42, monotonic_cst=mono + cats))]),
         f"hist_gradient_boosting{suffix}": Pipeline([
             ("pre", hgb_pre),
             ("model", HistGradientBoostingRegressor(categorical_features=cat_mask if with_segments else None,
-                                                    **hgb_kwargs))]),
+                                                    monotonic_cst=mono + cats, max_iter=400, learning_rate=0.05,
+                                                    min_samples_leaf=40, l2_regularization=1.0,
+                                                    random_state=42))]),
     }
 
 
@@ -100,14 +148,16 @@ def complexity(name: str) -> int:
 class PerSectorModel(BaseEstimator, RegressorMixin):
     """Un modèle par secteur quand le volume le permet, sinon le modèle global (avec segments)."""
 
-    def __init__(self, base_factory=None, min_obs: int = 1500):
+    def __init__(self, base_factory=None, min_obs: int = 1500, constraints: dict[str, int] | None = None):
         self.base_factory = base_factory
         self.min_obs = min_obs
+        self.constraints = constraints
 
     def fit(self, X, y):
         X = pd.DataFrame(X)
         y = np.asarray(y)
-        factory = self.base_factory or (lambda: make_candidates(True)["hist_gradient_boosting+segments"])
+        factory = self.base_factory or (
+            lambda: make_candidates(True, self.constraints)["hist_gradient_boosting+segments"])
         self.global_ = factory().fit(X, y)
         self.sector_models_ = {}
         for sector, idx in X.groupby("sector").groups.items():

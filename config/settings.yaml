@@ -160,6 +160,16 @@ ml:
     test_start: "2023-07-01"
     unseen_companies_share: 0.2       # part des sociétés exclues de l'entraînement (test « sociétés jamais vues »)
   n_jobs: 0                           # processus pour construire le dataset (0 = nb de cœurs - 1)
+  # Règles économiques imposées au modèle : +1 = le multiple « juste » ne peut que monter quand le KPI monte,
+  # -1 = ne peut que baisser, 0 = relation libre. Vérifiées après chaque entraînement (fiche du modèle).
+  monotonic_constraints:
+    revenue_cagr_5y: 1
+    fcf_cagr_5y: 1
+    share_change_5y: -1
+    roce_avg_5y: 1
+    net_debt_to_fcf: -1
+    gross_margin_ttm: 1
+    fcf_margin_ttm: 1
   min_sector_obs: 1500                # modèles par secteur seulement au-delà de ce volume d'entraînement
   usability:                          # en dessous : modèle "non exploitable", aucun prix affiché
     min_train_obs: 5000

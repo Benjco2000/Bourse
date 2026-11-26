@@ -99,12 +99,13 @@ def train(settings: Settings, store: Store, promote: bool | None = None) -> dict
 
     # ---------------- candidats, évalués sur la validation
     candidates: dict[str, Any] = {"baseline": GroupMedianBaseline()}
-    candidates.update(make_candidates(with_segments=False))
-    candidates.update(make_candidates(with_segments=True))
+    constraints = ml.get("monotonic_constraints") or {}
+    candidates.update(make_candidates(with_segments=False, constraints=constraints))
+    candidates.update(make_candidates(with_segments=True, constraints=constraints))
     min_sector = int(ml.get("min_sector_obs", 1500))
     big_sectors = [s for s, n in df.loc[tr, "sector"].value_counts().items() if n >= min_sector]
     if big_sectors:
-        candidates["per_sector:hist_gradient_boosting"] = PerSectorModel(min_obs=min_sector)
+        candidates["per_sector:hist_gradient_boosting"] = PerSectorModel(min_obs=min_sector, constraints=constraints)
     val_scores: dict[str, dict[str, float]] = {}
     fitted: dict[str, Any] = {}
     for name, model in candidates.items():
@@ -123,7 +124,7 @@ def train(settings: Settings, store: Store, promote: bool | None = None) -> dict
 
     # ---------------- modèle final : réentraîné sur train + val ; test évalué une seule fois
     trva = tr | va
-    final = _fresh(selected, min_sector)
+    final = _fresh(selected, min_sector, constraints)
     final.fit(X[trva], y[trva])
     baseline_final = GroupMedianBaseline().fit(X[trva], y[trva])
     test_m = metrics(y[te], final.predict(X[te])) if te.any() else {}
@@ -145,8 +146,17 @@ def train(settings: Settings, store: Store, promote: bool | None = None) -> dict
     ref = df.loc[trva]
     domain = {f: {"p01": float(ref[f].quantile(0.01)), "p99": float(ref[f].quantile(0.99)),
                   "median": float(ref[f].median())} for f in KPI_FEATURES if ref[f].notna().any()}
+    from .models import DEFAULT_MONOTONIC
+
+    mono = DEFAULT_MONOTONIC | constraints
+    violations = check_monotonicity(final, X[te] if te.any() else X[trva], mono, domain)
+    bad = {f: v for f, v in violations.items() if v > 0.005}
+    if bad:
+        log.warning("Règles économiques non respectées : %s", bad)
     usab_cfg = ml.get("usability", {})
     reasons = []
+    if bad:
+        reasons.append("règles économiques non respectées : " + ", ".join(f"{f} ({v:.0%})" for f, v in bad.items()))
     if tr.sum() < int(usab_cfg.get("min_train_obs", 5000)):
         reasons.append(f"{int(tr.sum())} observations d'entraînement (< {usab_cfg.get('min_train_obs', 5000)})")
     n_comp = int(df.loc[trva, "ticker"].nunique())
@@ -169,6 +179,7 @@ def train(settings: Settings, store: Store, promote: bool | None = None) -> dict
         "domain": domain, "val_scores": val_scores, "test": test_m, "test_baseline": test_base,
         "test_unseen": unseen_m, "test_interval_coverage": coverage,
         "importance": importance.to_dict("records"),
+        "monotonic_constraints": mono, "monotonicity_violations": violations,
         "usability": {"usable": usable, "reasons": reasons}, "dataset_card": card,
     }
 
@@ -188,6 +199,9 @@ def train(settings: Settings, store: Store, promote: bool | None = None) -> dict
                 mlflow.log_metric(f"{prefix}_{k}", v)
         if coverage is not None:
             mlflow.log_metric("test_interval_coverage_80", coverage)
+        for f, v in violations.items():
+            mlflow.log_metric(f"monotonic_violation__{f}", v)
+        mlflow.log_param("monotonic_constraints", json.dumps(mono))
         mlflow.set_tags({"usable": str(usable), "usability_reasons": "; ".join(reasons) or "ok"})
         with tempfile.TemporaryDirectory() as tmp:
             t = Path(tmp)
@@ -228,7 +242,7 @@ def _should_promote(client, current, test_m: dict[str, float], usable: bool) -> 
     """Règle de promotion automatique :
     - pas de champion -> promotion ;
     - un modèle NON exploitable ne remplace jamais un champion exploitable ;
-    - un modèle exploitable remplace un champion non exploitable ;
+    - un modèle exploitable remplace un champion non exploitable, ou entraîné sans les règles économiques ;
     - sinon, promotion seulement si l'erreur de test est meilleure (comparaison indicative : les jeux de test
       peuvent différer d'un entraînement à l'autre ; `bourse ml promote` permet de trancher à la main)."""
     if current is None:
@@ -237,16 +251,40 @@ def _should_promote(client, current, test_m: dict[str, float], usable: bool) -> 
         run = client.get_run(current.run_id)
         prev_usable = run.data.tags.get("usable") == "True"
         prev = run.data.metrics.get("test_medae")
+        prev_checked = "monotonic_constraints" in run.data.params  # champion entraîné sans règles économiques
     except Exception:
+        return True
+    if usable and not prev_checked:
         return True
     if prev_usable != usable:
         return usable
     return prev is None or bool(test_m and test_m["medae"] < prev)
 
 
-def _fresh(name: str, min_sector: int):
+def _fresh(name: str, min_sector: int, constraints: dict[str, int] | None = None):
     if name.startswith("per_sector"):
-        return PerSectorModel(min_obs=min_sector)
+        return PerSectorModel(min_obs=min_sector, constraints=constraints)
     if name == "baseline":
         return GroupMedianBaseline()
-    return make_candidates("+segments" in name)[name]
+    return make_candidates("+segments" in name, constraints)[name]
+
+
+def check_monotonicity(model, X: pd.DataFrame, constraints: dict[str, int], domain: dict[str, dict[str, float]],
+                       max_rows: int = 2000) -> dict[str, float]:
+    """Vérification après entraînement : pour chaque KPI contraint, on l'augmente d'un quart de sa plage
+    d'entraînement (p1–p99) et on mesure la part des cas où le multiple prédit varie dans le mauvais sens."""
+    X = X.head(max_rows)
+    base = model.predict(X)
+    out = {}
+    for f, sign in constraints.items():
+        if not sign or f not in domain:
+            continue
+        rows = X[f].notna().to_numpy()
+        if not rows.any():
+            continue
+        step = 0.25 * (domain[f]["p99"] - domain[f]["p01"]) or 0.01
+        up = X.copy()
+        up[f] = up[f] + step
+        diff = model.predict(up) - base
+        out[f] = float(np.mean((np.sign(sign) * diff[rows]) < -1e-9))
+    return out
