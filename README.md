@@ -87,7 +87,11 @@ Documentation détaillée : [`docs/PLAN.md`](docs/PLAN.md) (avancement par lots)
 [`docs/DECISIONS.md`](docs/DECISIONS.md) (choix techniques et conventions financières),
 [`docs/DATA_DICTIONARY.md`](docs/DATA_DICTIONARY.md) (tables et définitions).
 
-**Univers MVP** : 10 sociétés en 3 groupes de pairs — MSFT, AAPL, GOOGL, META / KO, PEP, PG / V, MA, AXP.
+**Univers** : 10 sociétés **suivies** (toutes les données : actualités, analystes, cotation…) — MSFT, AAPL,
+GOOGL, META / KO, PEP, PG / V, MA, AXP — et un **univers élargi** d'environ 1 000 grandes capitalisations US
+(`config/universe_ml.csv`) avec un jeu de données réduit (états financiers, capitalisation, segments) :
+elles ont les pages Vue globale, Historique de valorisation, Valorisation IA et Cash & actionnaires.
+Pour suivre une société en détail, ajoutez-la à `universe.tickers`.
 
 ---
 
@@ -201,7 +205,11 @@ bourse ml all
 | `bourse ml train --no-promote` | entraîner sans changer le champion |
 | `bourse ml ui` | affiche la commande pour ouvrir l'interface MLflow (`mlflow ui --backend-store-uri ...`) |
 
-Ensuite, `bourse run` met à jour chaque jour les prédictions avec le champion (sans réentraîner). Réentraîner
+Le modèle utilise le même lac de données que l'application (les sociétés de l'univers élargi). Si vous
+aviez déjà ingéré l'univers dans l'ancien lac séparé `data/ml`, récupérez-le sans nouvel appel API :
+`bourse ml merge-lake`.
+
+Ensuite, `bourse run` met à jour chaque jour les données de l'univers élargi et les prédictions avec le champion (sans réentraîner). Réentraîner
 quand l'univers ou les données ont significativement changé (par ex. une fois par mois ou par trimestre).
 
 Garde-fous : le modèle est déclaré **non exploitable** (aucun prix affiché) s'il a moins de 5 000
@@ -231,7 +239,9 @@ des ratios faussés ; les banques/assurances se prêtent mal au DCF sur free cas
 
 ## 5. Prochaines étapes (on les fera ensemble)
 
-### Étape 2 — Planifier le pipeline chaque jour et héberger l'app
+### Déploiement Databricks (Free Edition) : voir [`docs/DEPLOY_DATABRICKS.md`](docs/DEPLOY_DATABRICKS.md)
+
+### Étape 2 — Planifier le pipeline chaque jour et héberger l'app (options)
 
 Deux options, au choix :
 

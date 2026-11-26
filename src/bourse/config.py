@@ -78,7 +78,7 @@ class Settings:
 
 
 def _read_secret_fallbacks() -> str | None:
-    """Clé API : variable d'environnement, sinon secret Databricks / Streamlit si disponibles."""
+    """Clé API : variable d'environnement, sinon secret Databricks (scope `bourse` / clé `fmp-api-key`)."""
     key = os.getenv("FMP_API_KEY")
     if key:
         return key.strip()
@@ -89,7 +89,7 @@ def _read_secret_fallbacks() -> str | None:
 
         spark = SparkSession.getActiveSession()
         if spark is not None:
-            scope = os.getenv("FMP_SECRET_SCOPE", "fmp-scope")
+            scope = os.getenv("FMP_SECRET_SCOPE", "bourse")
             secret_key = os.getenv("FMP_SECRET_KEY", "fmp-api-key")
             return DBUtils(spark).secrets.get(scope, secret_key)
     except Exception:
@@ -97,11 +97,25 @@ def _read_secret_fallbacks() -> str | None:
     return None
 
 
+def _deep_merge(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:
+    out = dict(base)
+    for k, v in over.items():
+        out[k] = _deep_merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     config_path = Path(os.getenv("BOURSE_CONFIG", PROJECT_ROOT / "config" / "settings.yaml"))
     with open(config_path, encoding="utf-8") as fh:
         raw = yaml.safe_load(fh) or {}
+    # Surcharge par environnement : BOURSE_ENV=databricks -> config/settings.databricks.yaml
+    env = os.getenv("BOURSE_ENV")
+    if env:
+        overlay = config_path.with_name(f"settings.{env}.yaml")
+        if overlay.exists():
+            with open(overlay, encoding="utf-8") as fh:
+                raw = _deep_merge(raw, yaml.safe_load(fh) or {})
 
     data_dir = Path(os.getenv("BOURSE_DATA_DIR", PROJECT_ROOT / "data")).resolve()
     tickers = [t.strip().upper() for t in (raw.get("universe", {}) or {}).get("tickers", []) if t]

@@ -52,12 +52,14 @@ def _segments_text(seg: pd.DataFrame) -> tuple[str, int | None]:
     return ("\n".join(lines) or "non disponible"), fy
 
 
-def build_business_summaries(store: Store, llm: LLM | None) -> int:
+def build_business_summaries(store: Store, llm: LLM | None, tickers: list[str] | None = None) -> int:
     existing = store.read("gold", "business_summaries")
     if llm is None:
         log.info("Résumés IA : aucune clé LLM (OPENAI_API_KEY / ANTHROPIC_API_KEY), étape ignorée")
         return len(existing)
     companies = store.read("core", "companies")
+    if tickers is not None:
+        companies = companies[companies["ticker"].isin(tickers)]
     segments = store.read("core", "revenue_segments")
     snapshot = store.read("gold", "company_snapshot")
     cache = {r.ticker: r.input_hash for r in existing.itertuples()} if not existing.empty else {}

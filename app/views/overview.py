@@ -75,8 +75,9 @@ with desc_col:
         else:
             st.caption("Description indisponible.")
         if summary.empty:
-            st.caption("Le résumé « comment l'entreprise gagne de l'argent » généré par IA s'affichera ici une fois "
-                       "`OPENAI_API_KEY` renseignée et le pipeline relancé.")
+            st.caption("Résumé « comment l'entreprise gagne de l'argent » généré par IA : disponible pour les "
+                       "sociétés suivies (`universe.tickers`) une fois `OPENAI_API_KEY` renseignée et le pipeline "
+                       "relancé (`llm.business_summaries_scope: all` pour tout l'univers).")
 with seg_col:
     seg = data.for_symbol("core", "revenue_segments", sym, symbol_col="ticker")
     if seg.empty:

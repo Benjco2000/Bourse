@@ -22,6 +22,14 @@ universe:
     - V
     - MA
     - AXP
+  # Univers ÉLARGI : sociétés visibles dans l'application avec un jeu de données réduit (états financiers,
+  # capitalisation, segments) — pages Vue globale, Historique de valorisation, Valorisation IA, Cash.
+  # Les sociétés de `tickers` ci-dessus (« suivies ») reçoivent en plus actualités, cotation, analystes, etc.
+  # Fichier construit par `bourse ml universe` ; supprimez la ligne pour n'avoir que les sociétés suivies.
+  extended_universe_file: config/universe_ml.csv
+  extended_datasets: [profile, income_statement_annual, income_statement_quarter, balance_sheet_annual,
+                      balance_sheet_quarter, cash_flow_annual, cash_flow_quarter, market_cap_history,
+                      revenue_segments_product, revenue_segments_geo]
   # Groupes de pairs explicites (prioritaires sur l'endpoint "peers" de FMP). Modifiables librement.
   peer_groups:
     tech_platforms: [MSFT, AAPL, GOOGL, META]
@@ -129,7 +137,7 @@ news:
 
 # --------------------------------------------------------------------------- Valorisation IA (page 4)
 ml:
-  data_subdir: ml                     # lac de données ML séparé : data/ml/{bronze,silver,core,gold,ops}
+  data_subdir: ""                     # "" = même lac que l'application (recommandé) ; registre MLflow : data/ml
   universe_file: config/universe_ml.csv
   universe:
     # Plan Starter = actions US uniquement (CAC 40, Nikkei... exigent le plan Ultimate)

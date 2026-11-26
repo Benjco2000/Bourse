@@ -85,7 +85,9 @@ def run_pipeline(settings: Settings, store: Store, client: SupportsGet | None = 
             summary["gold"]["company_snapshot"] = len(build_snapshot(settings, store))
             summary["gold"]["valuation_history"] = len(build_valuation_history(store))
             llm = llm if llm is not None else (None if demo else make_llm(settings.section("llm")))
-            summary["gold"]["business_summaries"] = build_business_summaries(store, llm)
+            scope = settings.section("llm").get("business_summaries_scope", "tracked")
+            summary["gold"]["business_summaries"] = build_business_summaries(
+                store, llm, None if scope == "all" else list(settings.tickers))
             summary["gold"].update(build_news_layer(settings, store, resolve_universe(settings, store, tickers), llm))
             summary["gold"]["ml_predictions"] = _refresh_predictions(settings, store)
         if "quality" in steps:

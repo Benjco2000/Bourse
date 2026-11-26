@@ -199,3 +199,28 @@ par ce pipeline uniquement).
 
 **M9 — Biais connus.** Survivant (univers = sociétés cotées aujourd'hui), classification sectorielle actuelle
 appliquée au passé, cible = niveau de valorisation du marché (et non valeur intrinsèque).
+
+## Univers élargi et déploiement (Databricks)
+
+**U1 — Deux niveaux de sociétés.** « Suivies » (`universe.tickers`) : tous les jeux de données (actualités,
+cotation, analystes, dividendes…). « Univers élargi » (`extended_universe_file`, ≈ 1 000 sociétés) : jeu
+réduit (`extended_datasets` : profil, états financiers annuels et trimestriels, capitalisation, segments),
+suffisant pour les pages 1, 2, 4 et 5. Coût API quotidien ≈ 1 000 appels (capitalisation) + rafraîchissement
+hebdomadaire des états financiers. Actualités et résumés IA limités aux sociétés suivies (quota et coût LLM).
+
+**U2 — Un seul lac de données.** Le modèle ML lit le même lac que l'application (plus de lac séparé) : une
+société ingérée une fois sert aux deux. `bourse ml merge-lake` reprend l'ancien lac `data/ml` sans appel API.
+Pairs par défaut des sociétés hors groupes configurés : même industrie (sinon même secteur), capitalisations
+les plus proches.
+
+**D-DBX1 — Même code, configuration par environnement.** `BOURSE_ENV=databricks` superpose
+`config/settings.databricks.yaml` (registre MLflow Unity Catalog, expérience `/Shared/bourse_pfcf`).
+Données sur un Volume Unity Catalog via le montage `/Volumes` ; les écritures retombent sur une copie si le
+renommage atomique n'est pas supporté. Horodatages Parquet en microsecondes (lisibles par Spark) pour publier
+les tables gold en Delta.
+
+**D-DBX2 — Jobs = notebooks fins** qui appellent la CLI (`run_cli("run")`, `run_cli("ml", "train")`…) :
+aucune logique propre à Databricks dans les traitements. Secrets lus dans le scope `bourse`.
+
+**D-DBX3 — Application** : Databricks Apps n'a pas le montage `/Volumes` ; l'app copie les tables du Volume
+sur son disque local (API Files, incrémental, toutes les 30 min) et charge le modèle depuis Unity Catalog.

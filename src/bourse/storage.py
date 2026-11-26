@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import tempfile
 from collections.abc import Iterable
 from datetime import date, datetime, timezone
@@ -30,6 +31,16 @@ LAYERS = ("bronze", "silver", "core", "gold", "ops")
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _replace(tmp: str, path: Path) -> None:
+    """Renommage atomique ; repli par copie sur les systèmes de fichiers qui ne le permettent pas
+    (certains montages FUSE, dont les Volumes Unity Catalog)."""
+    try:
+        os.replace(tmp, path)
+    except OSError:
+        shutil.copyfile(tmp, path)
+        os.remove(tmp)
 
 
 class Store:
@@ -63,11 +74,10 @@ class Store:
         if not base.exists():
             return []
         envelopes = []
-        for path in base.glob("ingest_date=*/*.json"):
-            if since is not None:
-                part_date = path.parent.name.split("=", 1)[1]
-                if part_date < since.date().isoformat():
-                    continue
+        partitions = [p for p in base.glob("ingest_date=*") if p.is_dir()]
+        if since is not None:  # élagage par partition : on ne liste pas les fichiers des jours déjà traités
+            partitions = [p for p in partitions if p.name.split("=", 1)[1] >= since.date().isoformat()]
+        for path in (f for part in partitions for f in part.glob("*.json")):
             with open(path, encoding="utf-8") as fh:
                 env = json.load(fh)
             if since is not None and datetime.fromisoformat(env["fetched_at"]) <= since:
@@ -96,8 +106,10 @@ class Store:
         fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
         os.close(fd)
         try:
-            df.reset_index(drop=True).to_parquet(tmp, index=False)
-            os.replace(tmp, path)
+            # horodatages en microsecondes : lisibles par Spark / Delta (pas de nanosecondes)
+            df.reset_index(drop=True).to_parquet(tmp, index=False, coerce_timestamps="us",
+                                                 allow_truncated_timestamps=True)
+            _replace(tmp, path)
         finally:
             if os.path.exists(tmp):
                 os.remove(tmp)
@@ -135,4 +147,4 @@ class Store:
         fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(text)
-        os.replace(tmp, path)
+        _replace(tmp, path)

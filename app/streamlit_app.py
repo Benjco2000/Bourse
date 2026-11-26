@@ -39,6 +39,7 @@ pages = {
     ],
 }
 
+data.sync_from_volume()
 nav = st.navigation(pages)
 companies = data.companies()
 

@@ -16,6 +16,18 @@ import streamlit as st
 from bourse.config import PROJECT_ROOT
 
 
+@st.cache_data(ttl=1800, show_spinner="Synchronisation des données depuis Databricks…")
+def sync_from_volume() -> int:
+    """Databricks Apps : copie locale des tables du Volume (pas de montage /Volumes dans les apps).
+    Rafraîchie toutes les 30 min ; ne fait rien en local (variable BOURSE_VOLUME_PATH absente)."""
+    volume = os.getenv("BOURSE_VOLUME_PATH")
+    if not volume:
+        return 0
+    from bourse.databricks import sync_volume_to_local
+
+    return sync_volume_to_local(volume, os.getenv("BOURSE_DATA_DIR", "/tmp/bourse_data"))
+
+
 @st.cache_resource
 def data_location() -> tuple[Path, bool]:
     """(dossier de données, est_demo). Priorité : BOURSE_DATA_DIR > data/ > data_demo/."""

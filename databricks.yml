@@ -1,0 +1,44 @@
+# Databricks Asset Bundle (optionnel) : déploie les 2 jobs et l'application en une commande
+#   databricks bundle deploy        (depuis votre poste, CLI Databricks configurée)
+# ou depuis l'interface : dossier Git > bouton « Deploy » (bundles dans le workspace).
+bundle:
+  name: bourse
+
+resources:
+  jobs:
+    bourse_daily:
+      name: "Bourse — mise à jour quotidienne"
+      schedule:
+        quartz_cron_expression: "0 30 23 ? * MON-FRI"   # 23h30, après la clôture US
+        timezone_id: Europe/Paris
+      email_notifications:
+        on_failure: ["${workspace.current_user.userName}"]
+      tasks:
+        - task_key: refresh
+          notebook_task:
+            notebook_path: ./databricks/notebooks/01_daily_refresh.py
+          timeout_seconds: 7200
+    bourse_ml_retrain:
+      name: "Bourse — réentraînement du modèle"
+      schedule:
+        quartz_cron_expression: "0 0 7 1 * ?"          # le 1er de chaque mois, 7h
+        timezone_id: Europe/Paris
+      email_notifications:
+        on_failure: ["${workspace.current_user.userName}"]
+      tasks:
+        - task_key: retrain
+          notebook_task:
+            notebook_path: ./databricks/notebooks/02_ml_retrain.py
+            base_parameters:
+              ingest: "non"
+          timeout_seconds: 7200
+  apps:
+    bourse_app:
+      name: bourse
+      description: "Analyse fondamentale et valorisation (FMP)"
+      source_code_path: .
+
+targets:
+  dev:
+    mode: development
+    default: true

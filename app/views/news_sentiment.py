@@ -14,8 +14,15 @@ st.caption("Articles récupérés via FMP pour cette société. Le sentiment mes
 
 news = data.for_symbol("core", "news", sym, symbol_col="ticker")
 if news.empty:
-    st.info("Aucune actualité chargée pour cette société (lancez `bourse run` ; l'historique initial couvre "
-            "jusqu'à un an selon le plan FMP).")
+    from bourse.config import get_settings
+
+    if sym not in get_settings().tickers:
+        st.info(f"Les actualités ne sont collectées que pour les **sociétés suivies** (liste `universe.tickers` de "
+                f"`config/settings.yaml`), pour maîtriser le quota API et le coût du LLM. Ajoutez {sym} à cette liste "
+                "puis relancez `bourse run` pour suivre ses actualités.", icon=":material/info:")
+    else:
+        st.info("Aucune actualité chargée pour cette société (lancez `bourse run` ; l'historique initial couvre "
+                "jusqu'à un an selon le plan FMP).")
     st.stop()
 sent = data.for_symbol("gold", "news_sentiment", sym, symbol_col="ticker")
 news = news.merge(sent[["url", "score", "method"]], on="url", how="left") if not sent.empty else \

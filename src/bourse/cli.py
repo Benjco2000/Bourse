@@ -70,6 +70,7 @@ def main(argv: list[str] | None = None) -> int:
     p_ma = ml_sub.add_parser("all", help="universe (si absent) + ingest + dataset + train + predict")
     p_ma.add_argument("--limit", type=int)
     ml_sub.add_parser("ui", help="commande pour ouvrir l'interface MLflow")
+    ml_sub.add_parser("merge-lake", help="fusionne l'ancien lac ML séparé (data/ml) dans le lac principal")
     p_ano = sub.add_parser("anomalies", help="détail des anomalies détectées dans les états financiers")
     p_ano.add_argument("tickers", nargs="*")
     p_ano.add_argument("--all", action="store_true", help="inclure les signalements informatifs")
@@ -168,22 +169,23 @@ def _ml_demo(settings, store: Store) -> None:
         from .fmp.fake import FakeFMPClient
         from .ml.dataset import write_dataset
         from .ml.lake import ingest_ml, ml_store
-        from .ml.predict import run_predictions
-        from .ml.registry import load_model
         from .ml.train import train
         from .ml.universe import build_universe
     except ImportError:
         print("mlflow / scikit-learn non installés : démo ML ignorée (pip install -e \".[ml]\").")
         return
     raw = copy.deepcopy(settings.raw)
-    raw["ml"]["universe_file"] = str(settings.data_dir / "ml" / "universe_ml.csv")
+    universe_file = str(settings.data_dir / "ml" / "universe_ml.csv")
+    raw["ml"]["universe_file"] = universe_file
+    raw["universe"]["extended_universe_file"] = universe_file
     s = dataclasses.replace(settings, raw=raw)
     client = FakeFMPClient()
     build_universe(s, client)
     ingest_ml(s, client, force=True)
     write_dataset(s, ml_store(s))
     train(s, ml_store(s), promote=True)
-    run_predictions(s, store, load_model(s))
+    run_pipeline(s, store, steps=("gold", "quality"), demo=True)  # univers élargi + prédictions
+
 
 
 def _ml(settings, args) -> int:
@@ -193,7 +195,7 @@ def _ml(settings, args) -> int:
     try:
         from .ml import registry
         from .ml.dataset import write_dataset
-        from .ml.lake import ingest_ml, ml_store
+        from .ml.lake import ingest_ml, merge_legacy_lake, ml_store
         from .ml.predict import run_predictions
         from .ml.train import train
         from .ml.universe import build_universe, universe_path
@@ -211,6 +213,13 @@ def _ml(settings, args) -> int:
             print(f"{len(df)} sociétés dans {universe_path(settings)}")
         if cmd in ("ingest", "all"):
             ingest_ml(settings, make_client(settings), limit=args.limit, force=getattr(args, "force", False))
+            # indicateurs de l'application pour l'univers élargi (KPIs, multiples, cascade de trésorerie...)
+            run_pipeline(settings, Store(settings.data_dir), steps=("gold", "quality"))
+        if cmd == "merge-lake":
+            res = merge_legacy_lake(settings)
+            print(f"{res['files']} fichiers bruts récupérés depuis data/ml : reconstruction des tables…")
+            run_pipeline(settings, Store(settings.data_dir), steps=("silver", "core", "gold", "quality"),
+                         full_refresh=True)
         if cmd in ("dataset", "all"):
             _, card = write_dataset(settings, ml_store(settings))
             print(json.dumps({k: card[k] for k in ("n_rows", "n_companies", "period", "exclusions")},

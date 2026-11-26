@@ -40,6 +40,8 @@ l'objectif est le coût minimal pour une petite application (Cloud Run facture �
 
 ## Étapes de migration vers Databricks
 
+Mise en œuvre pour la Free Edition : [`DEPLOY_DATABRICKS.md`](DEPLOY_DATABRICKS.md). Récapitulatif :
+
 1. **Secrets** : `databricks secrets create-scope fmp-scope` puis clé `fmp-api-key` (déjà lue par
    `bourse.config`), et une clé pour le LLM.
 2. **Stockage** : un Volume Unity Catalog (`/Volumes/<catalog>/bourse/lake`) comme `BOURSE_DATA_DIR` pour le

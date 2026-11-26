@@ -178,39 +178,40 @@ def build_ttm(statements: pd.DataFrame) -> pd.DataFrame:
     - Repli : dernier exercice annuel (méthode `annual`), quand les trimestres manquent.
     Postes de bilan et nombre d'actions : valeur du dernier trimestre (ou de l'exercice).
     """
-    rows: list[dict[str, Any]] = []
+    cols = ["ticker", "period_end", "available_date", "method", "fiscal_year", "reported_currency",
+            *FLOW_FIELDS, *STOCK_FIELDS]
     if statements.empty:
-        statements = pd.DataFrame(columns=["ticker", "period_type", "period_end", "available_date"])
-    missing = [c for c in FLOW_FIELDS + STOCK_FIELDS if c not in statements.columns]
+        return pd.DataFrame(columns=cols)
+    missing = [c for c in FLOW_FIELDS + STOCK_FIELDS + ["fiscal_year", "reported_currency"]
+               if c not in statements.columns]
     statements = statements.assign(**{c: np.nan for c in missing})
-    for ticker, g in statements.groupby("ticker"):
-        q = g[g["period_type"] == "quarter"].sort_values("period_end").reset_index(drop=True)
-        for i in range(3, len(q)):
-            window = q.iloc[i - 3:i + 1]
-            gaps = window["period_end"].diff().dt.days.dropna()
-            if not gaps.between(80, 100).all():
-                continue
-            last = window.iloc[-1]
-            row = {"ticker": ticker, "period_end": last["period_end"], "available_date": last["available_date"],
-                   "method": "sum_4_quarters", "fiscal_year": last["fiscal_year"],
-                   "reported_currency": last["reported_currency"]}
-            for f in FLOW_FIELDS:
-                vals = window[f]
-                row[f] = float(vals.sum()) if vals.notna().all() else np.nan
-            for f in STOCK_FIELDS:
-                row[f] = last[f]
-            rows.append(row)
-        a = g[g["period_type"] == "annual"].sort_values("period_end")
-        for _, last in a.iterrows():
-            row = {"ticker": ticker, "period_end": last["period_end"], "available_date": last["available_date"],
-                   "method": "annual", "fiscal_year": last["fiscal_year"],
-                   "reported_currency": last["reported_currency"]}
-            row.update({f: last[f] for f in FLOW_FIELDS + STOCK_FIELDS})
-            rows.append(row)
-    if not rows:
-        return pd.DataFrame(columns=["ticker", "period_end", "available_date", "method", "fiscal_year",
-                                     "reported_currency", *FLOW_FIELDS, *STOCK_FIELDS])
-    ttm = pd.DataFrame(rows)
+
+    # --- trimestres : somme glissante de 4 (vectorisée), valide si les 3 écarts sont de 80 à 100 jours
+    q = statements[statements["period_type"] == "quarter"].sort_values(["ticker", "period_end"]).reset_index(drop=True)
+    frames = []
+    if not q.empty:
+        grp = q.groupby("ticker", sort=False)
+        gap_ok = grp["period_end"].diff().dt.days.between(80, 100).astype(float)
+        consecutive = gap_ok.groupby(q["ticker"]).rolling(3, min_periods=3).sum().reset_index(level=0, drop=True)
+        flows = q[FLOW_FIELDS].astype(float).groupby(q["ticker"]).rolling(4, min_periods=4).sum() \
+            .reset_index(level=0, drop=True)
+        # une somme n'est valable que si les 4 valeurs sont présentes (pas de NaN ignoré)
+        complete = q[FLOW_FIELDS].notna().astype(float).groupby(q["ticker"]).rolling(4, min_periods=4).sum() \
+            .reset_index(level=0, drop=True)
+        flows = flows.where(complete == 4)
+        valid = consecutive == 3
+        out = q.loc[valid, ["ticker", "period_end", "available_date", "fiscal_year", "reported_currency",
+                            *STOCK_FIELDS]].copy()
+        out[FLOW_FIELDS] = flows.loc[valid, FLOW_FIELDS]
+        out["method"] = "sum_4_quarters"
+        frames.append(out)
+    a = statements[statements["period_type"] == "annual"]
+    if not a.empty:
+        frames.append(a[["ticker", "period_end", "available_date", "fiscal_year", "reported_currency",
+                         *FLOW_FIELDS, *STOCK_FIELDS]].assign(method="annual"))
+    if not frames:
+        return pd.DataFrame(columns=cols)
+    ttm = pd.concat(frames, ignore_index=True)[cols]
     # Pour une même date de disponibilité, la somme de trimestres est préférée à l'annuel
     ttm["_rank"] = (ttm["method"] != "sum_4_quarters").astype(int)
     ttm = ttm.sort_values(["ticker", "available_date", "_rank"]).drop_duplicates(["ticker", "period_end", "method"])
@@ -285,7 +286,32 @@ def build_segments(store: Store) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def build_peers(store: Store, settings: Settings, tickers: list[str]) -> pd.DataFrame:
+def _industry_peers(companies: pd.DataFrame, market_caps: pd.Series, exclude: set[str],
+                    n: int = 3) -> list[dict[str, Any]]:
+    """Pairs par défaut : même industrie (sinon même secteur), capitalisations les plus proches (échelle log)."""
+    rows: list[dict[str, Any]] = []
+    if companies.empty:
+        return rows
+    c = companies[["ticker", "sector", "industry"]].copy()
+    c["log_mc"] = np.log(market_caps.reindex(c["ticker"]).to_numpy(dtype=float))
+    for r in c.itertuples():
+        if r.ticker in exclude:
+            continue
+        for level, col in (("industry", "industry"), ("sector", "sector")):
+            val = getattr(r, col)
+            if not isinstance(val, str) or not val:
+                continue
+            pool = c[(c[col] == val) & (c["ticker"] != r.ticker)]
+            if len(pool) >= 1:
+                dist = (pool["log_mc"] - r.log_mc).abs().fillna(np.inf)
+                for p in pool.assign(_d=dist).sort_values("_d").head(n)["ticker"]:
+                    rows.append({"ticker": r.ticker, "peer": p, "source": f"auto:{level}"})
+                break
+    return rows
+
+
+def build_peers(store: Store, settings: Settings, tickers: list[str],
+                companies: pd.DataFrame | None = None, market_cap: pd.DataFrame | None = None) -> pd.DataFrame:
     rows = []
     groups = (settings.section("universe").get("peer_groups") or {})
     for group, members in groups.items():
@@ -299,6 +325,11 @@ def build_peers(store: Store, settings: Settings, tickers: list[str]) -> pd.Data
         for r in fmp.itertuples():
             if r.query_symbol not in configured:
                 rows.append({"ticker": r.query_symbol, "peer": r.symbol, "source": "fmp_stock_peers"})
+    if companies is not None and not companies.empty:
+        latest = market_cap.sort_values("date").groupby("ticker")["market_cap"].last() \
+            if market_cap is not None and not market_cap.empty else pd.Series(dtype=float)
+        universe = companies[companies["ticker"].isin(tickers)] if tickers else companies
+        rows += _industry_peers(universe, latest, exclude={r["ticker"] for r in rows})
     peers = pd.DataFrame(rows, columns=["ticker", "peer", "source"]).drop_duplicates(["ticker", "peer"])
     peers = peers[peers["ticker"].isin(tickers)] if tickers else peers
     peers["peer_in_universe"] = peers["peer"].isin(tickers)
@@ -334,13 +365,15 @@ def _restrict(df: pd.DataFrame, tickers: list[str]) -> pd.DataFrame:
 
 def build_core(settings: Settings, store: Store, tickers: list[str]) -> dict[str, int]:
     statements = _restrict(build_statements(store, settings), tickers)
+    companies = _restrict(build_companies(store), tickers)
+    market_cap = _restrict(build_market_cap(store, statements), tickers)
     tables = {
-        "companies": _restrict(build_companies(store), tickers),
+        "companies": companies,
         "financial_statements": statements,
         "ttm": build_ttm(statements),
-        "market_cap_daily": _restrict(build_market_cap(store, statements), tickers),
+        "market_cap_daily": market_cap,
         "revenue_segments": _restrict(build_segments(store), tickers),
-        "peers": build_peers(store, settings, tickers),
+        "peers": build_peers(store, settings, tickers, companies, market_cap),
     }
     prices = _restrict(store.read("silver", "prices_daily"), tickers)
     if not prices.empty:

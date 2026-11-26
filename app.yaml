@@ -1,0 +1,10 @@
+# Databricks Apps — application Streamlit (source : la racine du dossier Git du dépôt).
+command: ["streamlit", "run", "app/streamlit_app.py"]
+env:
+  - name: BOURSE_ENV
+    value: databricks
+  # tables lues depuis le Volume Unity Catalog et copiées localement (voir app/lib/data.py)
+  - name: BOURSE_VOLUME_PATH
+    value: /Volumes/workspace/bourse/lake
+  - name: BOURSE_DATA_DIR
+    value: /tmp/bourse_data

@@ -23,11 +23,16 @@ CHAMPION = "champion"
 META_ARTIFACT = "bundle_meta.json"
 
 
+def registry_dir(settings: Settings) -> Path:
+    """Registre MLflow local : toujours data/ml (indépendant du lac de données)."""
+    return settings.data_dir / "ml"
+
+
 def configure(settings: Settings) -> str:
     import mlflow
 
     reg = settings.section("ml").get("registry", {})
-    base = settings.data_dir / settings.section("ml").get("data_subdir", "ml")
+    base = registry_dir(settings)
     base.mkdir(parents=True, exist_ok=True)
     tracking = reg.get("tracking_uri") or f"sqlite:///{(base / 'mlflow.db').as_posix()}"
     mlflow.set_tracking_uri(tracking)
@@ -38,14 +43,14 @@ def configure(settings: Settings) -> str:
 def registry_exists(settings: Settings) -> bool:
     """Vrai si un registre distant est configuré ou si la base locale existe (évite de la créer pour rien)."""
     reg = settings.section("ml").get("registry", {})
-    base = settings.data_dir / settings.section("ml").get("data_subdir", "ml")
-    return bool(reg.get("tracking_uri")) or (base / "mlflow.db").exists()
+    return bool(reg.get("tracking_uri")) or (registry_dir(settings) / "mlflow.db").exists()
 
 
 def experiment(settings: Settings, name: str = "bourse_pfcf") -> str:
     import mlflow
 
-    base = settings.data_dir / settings.section("ml").get("data_subdir", "ml")
+    base = registry_dir(settings)
+    name = settings.section("ml").get("registry", {}).get("experiment") or name
     exp = mlflow.get_experiment_by_name(name)
     if exp is None:
         location = None if str(mlflow.get_tracking_uri()).startswith("databricks") else \

@@ -1,0 +1,9 @@
+# Surcharge de settings.yaml quand BOURSE_ENV=databricks (jobs et application sur Databricks).
+# Données : BOURSE_DATA_DIR=/Volumes/workspace/bourse/lake (défini par les notebooks de job).
+ml:
+  n_jobs: 4
+  registry:
+    tracking_uri: databricks
+    registry_uri: databricks-uc
+    model_name: workspace.bourse.bourse_pfcf      # <catalogue>.<schéma>.<modèle> (Unity Catalog)
+    experiment: /Shared/bourse_pfcf

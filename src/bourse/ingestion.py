@@ -14,6 +14,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import timedelta
+from pathlib import Path
 from typing import Any, Protocol
 
 import pandas as pd
@@ -60,10 +61,29 @@ class IngestionSummary:
         }
 
 
+def extended_tickers(settings: Settings) -> list[str]:
+    """Univers élargi (CSV), sans les sociétés suivies. Vide si le fichier n'est pas configuré / absent."""
+    from .config import PROJECT_ROOT
+
+    files = [settings.section("universe").get("extended_universe_file"),
+             settings.section("ml").get("universe_file")]  # le modèle doit voir les mêmes sociétés que l'app
+    tickers: list[str] = []
+    for f in dict.fromkeys(x for x in files if x):
+        path = Path(f) if Path(f).is_absolute() else PROJECT_ROOT / f
+        if not path.exists():
+            continue
+        df = pd.read_csv(path)
+        col = "symbol" if "symbol" in df.columns else df.columns[0]
+        tickers += df[col].dropna().astype(str).str.strip().str.upper().tolist()
+    tracked = set(settings.tickers)
+    return [t for t in dict.fromkeys(tickers) if t not in tracked]
+
+
 def resolve_universe(settings: Settings, store: Store, tickers: list[str] | None = None) -> list[str]:
+    """Sociétés suivies (toutes les données) + univers élargi (jeu de données réduit)."""
     if tickers:
         return [t.upper() for t in tickers]
-    universe = list(settings.tickers)
+    universe = list(settings.tickers) + extended_tickers(settings)
     if settings.section("universe").get("include_sp500"):
         sp = store.read("silver", "sp500_constituents")
         if not sp.empty and "symbol" in sp.columns:
@@ -153,8 +173,12 @@ def run_ingestion(settings: Settings, store: Store, client: SupportsGet,
 
     # Ordre société par société : si le run s'interrompt (quota), les sociétés déjà traitées sont complètes
     tasks = []
+    tracked = set(settings.tickers)
+    reduced = set(settings.section("universe").get("extended_datasets") or [])
     for sym in universe:
         for ds in per_symbol:
+            if sym not in tracked and reduced and ds.name not in reduced:
+                continue  # société de l'univers élargi : jeu de données réduit
             if is_fresh(ds, sym):
                 summary.skipped_fresh += 1
             else:
