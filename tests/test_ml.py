@@ -200,3 +200,30 @@ def test_monotonic_constraints_hold_even_when_data_says_otherwise():
             model.fit(X, y)
             viol = check_monotonicity(model, X, DEFAULT_MONOTONIC, domain)
             assert max(viol.values()) == 0, (name, viol)
+
+
+def test_list_versions_unity_catalog_shape(monkeypatch):
+    """Registre Unity Catalog : versions sans tags exploitables → « exploitable » lu sur le run."""
+    from types import SimpleNamespace
+
+    import mlflow.tracking
+
+    run = SimpleNamespace(data=SimpleNamespace(params={"selected_model": "hgb"}, metrics={"test_medae": 8.9},
+                                               tags={"usable": "True"}))
+    version = SimpleNamespace(version="1", run_id="r1", creation_timestamp=0, tags=lambda: None)
+
+    class Client:
+        def search_model_versions(self, _):
+            return [version]
+
+        def get_model_version_by_alias(self, name, alias):
+            return SimpleNamespace(version="1")
+
+        def get_run(self, _):
+            return run
+
+    monkeypatch.setattr(mlflow.tracking, "MlflowClient", Client)
+    monkeypatch.setattr(registry, "configure", lambda s: "")
+    out = registry.list_versions(get_settings())
+    assert out == [{"version": "1", "champion": True, "run_id": "r1", "model": "hgb", "created": 0,
+                    "test_medae": 8.9, "usable": "True"}]

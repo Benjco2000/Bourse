@@ -116,9 +116,15 @@ def list_versions(settings: Settings) -> list[dict[str, Any]]:
     out = []
     for v in sorted(versions, key=lambda v: int(v.version)):
         run = client.get_run(v.run_id)
+        # « exploitable » lu sur le run (toujours renseigné) : le registre Unity Catalog ne renvoie pas les
+        # tags des versions dans search_model_versions (attribut parfois absent ou non dictionnaire)
+        usable = run.data.tags.get("usable")
+        if usable is None:
+            tags = getattr(v, "tags", None)
+            usable = tags.get("usable") if isinstance(tags, dict) else None
         out.append({"version": str(v.version), "champion": str(v.version) == str(champion), "run_id": v.run_id,
                     "model": run.data.params.get("selected_model"), "created": v.creation_timestamp,
-                    "test_medae": run.data.metrics.get("test_medae"), "usable": v.tags.get("usable")})
+                    "test_medae": run.data.metrics.get("test_medae"), "usable": usable})
     return out
 
 

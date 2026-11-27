@@ -218,7 +218,8 @@ prédictions de test). Chaque entraînement crée une version du modèle `bourse
 déplacé automatiquement selon une règle prudente : jamais vers un modèle non exploitable si le champion est
 exploitable, toujours vers un modèle exploitable si le champion ne l'est pas, sinon si l'erreur de test est
 meilleure (comparaison indicative, les jeux de test pouvant différer) — ou forcé / empêché (`--promote` /
-`--no-promote`) ; `bourse ml promote <v>` permet le retour arrière.
+`--no-promote`) ; `bourse ml promote <v>` permet le retour arrière. Le statut « exploitable » est lu sur le
+run MLflow (tag `usable`) : le registre Unity Catalog ne renvoie pas les tags des versions dans ses recherches.
 « Déploiement » = prédictions batch (`gold.ml_predictions`) recalculées à chaque `bourse run`, et
 `load_model()` dans l'application pour le simulateur. Sérialisation cloudpickle (modèles produits localement
 par ce pipeline uniquement).
