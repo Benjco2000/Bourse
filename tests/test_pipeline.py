@@ -305,3 +305,17 @@ def test_history_param_refused_falls_back_to_recent(settings, store):
                           force=True)
     assert "stock_news" not in result["ingest"]["restricted_datasets"]
     assert not store.read("silver", "stock_news").empty
+
+
+def test_merge_asof_mixed_datetime_units(tmp_path):
+    """Parquet relu en microsecondes (pandas récent / Databricks) joint à des dates en nanosecondes."""
+    from bourse.storage import Store, merge_asof
+
+    st = Store(tmp_path)
+    st.write("core", "x", pd.DataFrame({"d": pd.to_datetime(["2024-01-01", "2024-02-01"]), "v": [1, 2]}))
+    right = st.read("core", "x")
+    assert str(right["d"].dtype) == "datetime64[ns]"
+    left = pd.DataFrame({"t": pd.to_datetime(["2024-01-15", "2024-02-15"])})
+    right_us = right.assign(d=right["d"].astype("datetime64[us]"))
+    out = merge_asof(left, right_us, left_on="t", right_on="d", direction="backward")
+    assert out["v"].tolist() == [1, 2]

@@ -22,7 +22,7 @@ from ..config import Settings
 from ..core.normalize import ttm_as_of
 from ..financials.kpis import compute_kpis
 from ..financials.metrics import cap_bucket
-from ..storage import Store, utcnow
+from ..storage import Store, merge_asof, utcnow
 
 log = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ def _ticker_rows(job: tuple) -> tuple[list[dict[str, Any]], dict[str, int], int]
         exclude("capitalisation indisponible (société)", len(dates))
         return [], excl, len(dates)
     annual = st_t[st_t["period_type"] == "annual"].sort_values("fiscal_year")
-    caps = pd.merge_asof(pd.DataFrame({"t": dates}),
+    caps = merge_asof(pd.DataFrame({"t": dates}),
                          mc_t[["date", "market_cap"]].sort_values("date").rename(columns={"date": "d"}),
                          left_on="t", right_on="d", direction="backward", tolerance=pd.Timedelta(days=7))
     rows = []

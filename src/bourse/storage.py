@@ -24,9 +24,35 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 LAYERS = ("bronze", "silver", "core", "gold", "ops")
+
+
+def to_ns(df: pd.DataFrame) -> pd.DataFrame:
+    """Uniformise les colonnes date/heure en nanosecondes.
+
+    Les Parquet sont écrits en microsecondes (Spark) ; selon la version de pandas, la relecture donne du
+    `datetime64[us]` ou du `[ns]`, et `merge_asof` refuse de joindre deux unités différentes.
+    """
+    for col in df.columns:
+        dtype = df[col].dtype
+        if not pd.api.types.is_datetime64_any_dtype(dtype):
+            continue
+        unit = getattr(dtype, "unit", None) or np.datetime_data(dtype)[0]
+        if unit != "ns":
+            df[col] = df[col].astype(str(dtype).replace(f"[{unit}", "[ns"))
+    return df
+
+
+def merge_asof(left: pd.DataFrame, right: pd.DataFrame, *, left_on: str, right_on: str, **kw: Any) -> pd.DataFrame:
+    """`pd.merge_asof` robuste aux unités de date différentes (us / ns) entre les deux côtés."""
+    left = left.copy()
+    right = right.copy()
+    left[left_on] = pd.to_datetime(left[left_on]).astype("datetime64[ns]")
+    right[right_on] = pd.to_datetime(right[right_on]).astype("datetime64[ns]")
+    return pd.merge_asof(left, right, left_on=left_on, right_on=right_on, **kw)
 
 
 def utcnow() -> datetime:
@@ -98,7 +124,7 @@ class Store:
         path = self.table_path(layer, name)
         if not path.exists():
             return pd.DataFrame()
-        return pd.read_parquet(path, columns=columns)
+        return to_ns(pd.read_parquet(path, columns=columns))
 
     def write(self, layer: str, name: str, df: pd.DataFrame) -> Path:
         path = self.table_path(layer, name)

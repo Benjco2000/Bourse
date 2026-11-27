@@ -14,7 +14,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from ..storage import Store
+from ..storage import Store, merge_asof
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ def build_valuation_history(store: Store) -> pd.DataFrame:
             continue
         timeline = ttm_timeline(t)[["available_date", "period_end", "method", *MULTIPLES.values()]]
         m = m.sort_values("date")
-        merged = pd.merge_asof(m, timeline, left_on="date", right_on="available_date", direction="backward")
+        merged = merge_asof(m, timeline, left_on="date", right_on="available_date", direction="backward")
         stale = (merged["date"] - merged["period_end"]).dt.days > MAX_TTM_AGE_DAYS
         merged.loc[stale, list(MULTIPLES.values())] = np.nan
         for mult, denom in MULTIPLES.items():

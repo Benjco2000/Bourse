@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 
 from ..config import Settings
-from ..storage import Store
+from ..storage import Store, merge_asof
 
 log = logging.getLogger(__name__)
 
@@ -257,7 +257,7 @@ def build_market_cap(store: Store, statements: pd.DataFrame) -> pd.DataFrame:
             if st.empty:
                 continue
             shares = st[["available_date", "shares_diluted"]].sort_values("available_date")
-            merged = pd.merge_asof(p.sort_values("date"), shares, left_on="date", right_on="available_date",
+            merged = merge_asof(p.sort_values("date"), shares, left_on="date", right_on="available_date",
                                    direction="backward").dropna(subset=["shares_diluted"])
             out.append(pd.DataFrame({"ticker": ticker, "date": merged["date"],
                                      "market_cap": merged["close"] * merged["shares_diluted"],

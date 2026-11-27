@@ -243,7 +243,9 @@ les plus proches.
 `config/settings.databricks.yaml` (registre MLflow Unity Catalog, expérience `/Shared/bourse_pfcf`).
 Données sur un Volume Unity Catalog via le montage `/Volumes` ; les écritures retombent sur une copie si le
 renommage atomique n'est pas supporté. Horodatages Parquet en microsecondes (lisibles par Spark) pour publier
-les tables gold en Delta.
+les tables gold en Delta. À la relecture, toutes les colonnes de dates sont ramenées en nanosecondes (`Store.read`) et
+les jointures temporelles passent par `storage.merge_asof`, qui aligne les unités des deux côtés : selon la
+version de pandas (locale ou Databricks), un Parquet en microsecondes est relu en `[us]` ou en `[ns]`.
 
 **D-DBX2 — Jobs = notebooks fins** qui appellent la CLI (`run_cli("run")`, `run_cli("ml", "train")`…) :
 aucune logique propre à Databricks dans les traitements. Secrets lus dans le scope `bourse`.
