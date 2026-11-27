@@ -11,7 +11,7 @@ import logging
 
 import pandas as pd
 
-from ..llm import LLM, LLMError, fingerprint
+from ..llm import LLM, LLMError, LLMUnavailableError, fingerprint
 from ..storage import Store, utcnow
 
 log = logging.getLogger(__name__)
@@ -79,6 +79,8 @@ def build_business_summaries(store: Store, llm: LLM | None, tickers: list[str] |
             continue
         try:
             text = llm.complete(SYSTEM, prompt)
+        except LLMUnavailableError:
+            break  # déjà signalé une fois par le client LLM
         except (LLMError, OSError) as exc:
             log.warning("Résumé IA impossible pour %s : %s", c["ticker"], exc)
             continue

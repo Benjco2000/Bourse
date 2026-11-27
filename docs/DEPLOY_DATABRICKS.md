@@ -89,6 +89,14 @@ réentraînement (§ 4), à lancer une fois après le premier job quotidien.
 Ajoutez une notification e-mail en cas d'échec. Lancez chaque job une première fois à la main
 (*Run now*) : d'abord le quotidien, puis le réentraînement.
 
+**Premier run du quotidien** : ≈ 35-40 min (silver reconstruit depuis tout le bronze envoyé), puis
+quelques minutes les jours suivants (incrémental). Avertissements attendus et sans gravité :
+- `stock_news : historique initial refusé par le plan FMP` → repli automatique sur les actualités récentes ;
+- `LLM désactivé pour la suite du run (crédit épuisé)` → ajoutez du crédit sur platform.openai.com
+  (*Billing*) ; en attendant, l'app affiche les textes existants et le sentiment lexical. Les résumés et
+  synthèses manquants sont générés au run suivant ;
+- `Cohérence des états financiers WARN` → anomalies des données FMP signalées, non corrigées (`bourse anomalies`).
+
 **Ou par le bundle** : `databricks.yml` décrit les deux jobs et l'application (`databricks bundle deploy`
 depuis votre poste, ou bouton *Deploy* du dossier Git si disponible).
 

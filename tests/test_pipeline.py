@@ -289,3 +289,19 @@ def test_ingestion_orders_tasks_by_ticker(settings, store):
     finally:
         settings.raw["api"]["max_workers"] = 8
     assert seen == ["KO", "KO", "KO", "MSFT", "MSFT", "MSFT"]
+
+
+def test_history_param_refused_falls_back_to_recent(settings, store):
+    """Plan qui refuse la borne `from` initiale des actualités : on retente sans borne, sans désactiver."""
+    class NoHistory(FakeFMPClient):
+        def get(self, path, params=None):
+            if path == "news/stock" and "from" in (params or {}):
+                self.calls += 1
+                raise PlanRestrictedError("Premium Query Parameter: 'Special Endpoint : This value set for "
+                                          "'from' is not available under your current subscription")
+            return super().get(path, params)
+
+    result = run_pipeline(settings, store, client=NoHistory(today=date(2026, 11, 19)), steps=("ingest", "silver"),
+                          force=True)
+    assert "stock_news" not in result["ingest"]["restricted_datasets"]
+    assert not store.read("silver", "stock_news").empty

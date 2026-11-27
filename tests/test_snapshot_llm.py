@@ -104,3 +104,43 @@ def test_openai_responses_parsing(monkeypatch):
     assert captured["url"].endswith("/v1/responses")
     assert captured["headers"]["Authorization"] == "Bearer sk-test"
     assert captured["body"]["instructions"] == "sys" and captured["body"]["input"] == "prompt"
+
+
+def test_llm_disabled_after_exhausted_credit(monkeypatch):
+    """Crédit épuisé : un seul appel HTTP, puis le client refuse sans rappeler l'API."""
+    import pytest
+
+    from bourse import llm as llm_mod
+
+    calls = []
+
+    class Resp:
+        status_code = 429
+        text = '{"error": {"code": "credit_balance_exhausted", "message": "no credits"}}'
+
+    def fake_post(url, headers, json, timeout):
+        calls.append(url)
+        return Resp()
+
+    monkeypatch.setattr(llm_mod.requests, "post", fake_post)
+    client = llm_mod.OpenAILLM("sk-test", "gpt-6-luna")
+    for _ in range(3):
+        with pytest.raises(llm_mod.LLMUnavailableError):
+            client.complete("sys", "prompt")
+    assert len(calls) == 1
+
+
+def test_business_summaries_stop_when_llm_unavailable(demo_store):
+    from bourse.llm import LLMUnavailableError
+    from bourse.transform.business import build_business_summaries
+
+    class Broke:
+        model = "x"
+        calls = 0
+
+        def complete(self, system, prompt, max_tokens=800):
+            Broke.calls += 1
+            raise LLMUnavailableError("credit_balance_exhausted")
+
+    build_business_summaries(demo_store, Broke())
+    assert Broke.calls == 1

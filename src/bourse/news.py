@@ -19,7 +19,7 @@ from typing import Any
 import pandas as pd
 
 from .config import Settings
-from .llm import LLM, LLMError, fingerprint
+from .llm import LLM, LLMError, LLMUnavailableError, fingerprint
 from .storage import Store, utcnow
 
 log = logging.getLogger(__name__)
@@ -127,6 +127,8 @@ def score_articles(store: Store, llm: LLM | None, max_llm: int = 400, batch: int
                     i, sc = int(item["id"]), float(item["score"])
                     if 0 <= i < len(chunk):
                         llm_scores[chunk.iloc[i]["url"]] = max(-1.0, min(1.0, sc))
+            except LLMUnavailableError:
+                break  # déjà signalé : repli lexical pour le reste
             except (LLMError, ValueError, KeyError, TypeError, OSError) as exc:
                 log.warning("Notation LLM d'un lot d'articles impossible (%s) : repli lexical", exc)
     now = utcnow().replace(tzinfo=None)
@@ -169,7 +171,9 @@ def build_synthesis(settings: Settings, store: Store, llm: LLM | None) -> pd.Dat
     news = store.read("core", "news")
     sent = store.read("gold", "news_sentiment")
     existing = store.read("gold", "news_synthesis")
-    cache = {r.ticker: r.input_hash for r in existing.itertuples()} if not existing.empty else {}
+    # seules les synthèses abouties (ou sans assez d'articles) sont en cache : un échec est retenté au run suivant
+    cache = {r.ticker: r.input_hash for r in existing.itertuples()
+             if getattr(r, "status", "ok") in ("ok", "insufficient")} if not existing.empty else {}
     rows = existing.to_dict("records") if not existing.empty else []
     if news.empty:
         return existing
@@ -200,6 +204,8 @@ def build_synthesis(settings: Settings, store: Store, llm: LLM | None) -> pd.Dat
                 ids = [int(i) for i in parsed.get("article_ids", []) if 0 <= int(i) < len(recent)]
                 parsed["article_urls"] = [recent.iloc[i]["url"] for i in ids]
                 rec.update(synthesis_json=json.dumps(parsed, ensure_ascii=False), model=llm.model, status="ok")
+            except LLMUnavailableError:
+                rec["status"] = "no_llm"
             except (LLMError, ValueError, KeyError, TypeError, AttributeError, OSError) as exc:
                 log.warning("Synthèse IA impossible pour %s : %s", ticker, exc)
                 rec["status"] = "error"

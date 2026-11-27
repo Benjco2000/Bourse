@@ -29,6 +29,7 @@ def ml_env(tmp_path_factory):
     raw = copy.deepcopy(get_settings().raw)
     raw["api"]["plan"] = "starter"
     raw["ml"]["universe_file"] = str(root / "universe.csv")
+    raw["universe"]["extended_universe_file"] = str(root / "universe.csv")  # pas l'univers réel versionné
     raw["ml"]["universe"]["max_tickers"] = 30
     s = dataclasses.replace(get_settings(), raw=raw, data_dir=root / "data", tickers=["MSFT", "KO", "PEP", "AXP"])
     client = FakeFMPClient(today=TODAY)

@@ -215,23 +215,46 @@ def _execute(tasks: list[tuple[Dataset, str]], settings: Settings, store: Store,
         return
     lock = threading.Lock()
     last_dates = last_dates or {}
+    no_history: set[str] = set()  # datasets dont le paramètre `from` initial est refusé par le plan
+
+    def fetch(ds: Dataset, key: str, params: dict[str, Any], initial: bool) -> Any:
+        if initial and ds.name in no_history:
+            params.pop("from", None)
+            params.pop("to", None)
+        try:
+            return _get_paginated(client, ds, params)
+        except PlanRestrictedError as exc:
+            # Certains plans limitent la profondeur d'historique (« value set for 'from' is not available ») :
+            # on retente sans borne de date (données les plus récentes), puis on s'en souvient pour ce run.
+            if not initial or "from" not in params or "'from'" not in str(exc):
+                raise
+            with lock:
+                if ds.name not in no_history:
+                    no_history.add(ds.name)
+                    log.warning("%s : historique initial refusé par le plan FMP, récupération des données "
+                                "récentes uniquement", ds.name)
+            params.pop("from", None)
+            params.pop("to", None)
+            return _get_paginated(client, ds, params)
 
     def work(ds: Dataset, key: str) -> None:
         with lock:
             if ds.name in summary.restricted_datasets or summary.quota_exceeded:
                 return
         params = dict(ds.params(cfg))
+        initial = True
         if ds.scope == "symbol":
             params[ds.symbol_param] = key
             known = last_dates.get(ds.name, {})
             if ds.incremental and key in known:
+                initial = False
                 params["from"] = (pd.Timestamp(known[key]) - pd.Timedelta(days=3 if ds.max_pages > 1 else 7)
                                   ).date().isoformat()
         fetched_at = utcnow()
         row: dict[str, Any] = {"dataset": ds.name, "key": key, "last_attempt_at": fetched_at,
                                "last_success_at": pd.NaT, "status": "ok", "error": None, "rows": 0}
         try:
-            payload = _get_paginated(client, ds, params)
+            payload = fetch(ds, key, params, initial)
             store.write_bronze(ds.name, key, payload, params, fetched_at)
             row["last_success_at"] = fetched_at
             row["rows"] = _payload_rows(payload)

@@ -23,6 +23,9 @@ MVP nettement plus long).
 **D4 — Connecteur FMP isolé** (`fmp/client.py` + catalogue déclaratif `fmp/datasets.py`) : limiteur de
 débit, retries avec backoff, détection des refus de plan **par ticker**, arrêt propre sur quota journalier
 et reprise au run suivant. La clé n'est lue que côté serveur (`.env`, secret scope Databricks).
+Si le plan refuse la profondeur d'historique demandée au premier chargement (« value set for 'from' is not
+available »), l'appel est retenté sans borne de date (données récentes seulement) et le jeu de données
+n'est pas désactivé ; les runs suivants restent incrémentaux.
 
 **D5 — Univers MVP en groupes de pairs** (tech : MSFT, AAPL, GOOGL, META ; consommation : KO, PEP, PG ;
 paiements : V, MA, AXP) pour que le tableau des concurrents repose sur des données réellement ingérées.
@@ -93,6 +96,10 @@ qualité ; les calculs concernés passent en N/A ou orange, jamais en valeur cor
 
 **Q2 — Absent ≠ zéro.** Toutes les fonctions de calcul renvoient N/A sur donnée manquante.
 
+**Q3 — Fraîcheur des cours** contrôlée sur les sociétés suivies uniquement : l'univers élargi n'a pas de
+cours quotidiens (capitalisation historique seulement) et les anciens tickers restés en silver ne sont pas
+signalés.
+
 ## Page « Vue globale » (lot 4)
 
 **P1 — Sélection de la société dans la barre latérale**, partagée par toutes les pages (et l'URL
@@ -141,6 +148,11 @@ Classe : positif si > 0,15, négatif si < −0,15, sinon neutre (configurable).
 **N3 — Synthèse IA** sur les 30 derniers jours (40 articles max, triés par pertinence puis date) : thèmes,
 positifs, négatifs, risques, sentiment, confiance, et identifiants des articles justificatifs (vérifiés).
 Moins de 3 articles → « données insuffisantes », pas d'appel LLM. Mise en cache sur l'ensemble des URLs.
+
+**N4 — Panne LLM définitive (crédit épuisé, clé refusée).** Le client LLM se coupe dès la première erreur de
+ce type (un seul avertissement, plus aucun appel pendant le run) : textes IA existants conservés, sentiment
+par repli lexical. Seules les synthèses abouties sont mises en cache : une synthèse en échec ou sans LLM est
+retentée au run suivant.
 
 **C1 — Cascade de trésorerie (page 5).** OCF → CAPEX → FCF → rachats, dividendes, acquisitions nettes,
 dette nette, émissions d'actions → « autres flux / réconciliation » → variation de trésorerie publiée.

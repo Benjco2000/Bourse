@@ -23,13 +23,43 @@ class LLMError(RuntimeError):
     pass
 
 
+class LLMUnavailableError(LLMError):
+    """Erreur définitive pour le run (crédit épuisé, clé invalide) : inutile de réessayer."""
+
+
+# Erreurs qui ne se résoudront pas pendant le run : le client se coupe après la première
+FATAL_MARKERS = ("credit_balance_exhausted", "insufficient_quota", "invalid_api_key", "billing",
+                 "credit balance is too low")
+
+
+def _check_response(llm: _BaseLLM, status: int, text: str) -> None:
+    if status < 400:
+        return
+    msg = f"HTTP {status} : {text[:200]}"
+    if status in (401, 403) or any(m in text for m in FATAL_MARKERS):
+        llm.disabled = msg
+        log.warning("LLM désactivé pour la suite du run (%s) : les textes IA ne seront pas mis à jour, "
+                    "le sentiment des actualités utilise le repli lexical. Détail : %s",
+                    "clé refusée" if status in (401, 403) else "crédit épuisé", msg)
+        raise LLMUnavailableError(msg)
+    raise LLMError(msg)
+
+
+class _BaseLLM:
+    disabled: str | None = None
+
+    def _guard(self) -> None:
+        if self.disabled:
+            raise LLMUnavailableError(self.disabled)
+
+
 class LLM(Protocol):
     model: str
 
     def complete(self, system: str, prompt: str, max_tokens: int = 800) -> str: ...
 
 
-class AnthropicLLM:
+class AnthropicLLM(_BaseLLM):
     url = "https://api.anthropic.com/v1/messages"
 
     def __init__(self, api_key: str, model: str, timeout: float = 60):
@@ -38,6 +68,7 @@ class AnthropicLLM:
         self.timeout = timeout
 
     def complete(self, system: str, prompt: str, max_tokens: int = 800) -> str:
+        self._guard()
         resp = requests.post(
             self.url,
             headers={"x-api-key": self.api_key, "anthropic-version": "2023-06-01",
@@ -46,13 +77,12 @@ class AnthropicLLM:
                   "messages": [{"role": "user", "content": prompt}]},
             timeout=self.timeout,
         )
-        if resp.status_code >= 400:
-            raise LLMError(f"HTTP {resp.status_code} : {resp.text[:200]}")
+        _check_response(self, resp.status_code, resp.text)
         data = resp.json()
         return "".join(block.get("text", "") for block in data.get("content", []) if block.get("type") == "text")
 
 
-class OpenAILLM:
+class OpenAILLM(_BaseLLM):
     url = "https://api.openai.com/v1/responses"
 
     def __init__(self, api_key: str, model: str, timeout: float = 90):
@@ -61,6 +91,7 @@ class OpenAILLM:
         self.timeout = timeout
 
     def complete(self, system: str, prompt: str, max_tokens: int = 800) -> str:
+        self._guard()
         resp = requests.post(
             self.url,
             headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
@@ -69,8 +100,7 @@ class OpenAILLM:
                   "max_output_tokens": max_tokens * 3},
             timeout=self.timeout,
         )
-        if resp.status_code >= 400:
-            raise LLMError(f"HTTP {resp.status_code} : {resp.text[:200]}")
+        _check_response(self, resp.status_code, resp.text)
         data = resp.json()
         if data.get("output_text"):
             return data["output_text"]

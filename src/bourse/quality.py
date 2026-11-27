@@ -43,12 +43,19 @@ def run_quality_checks(settings: Settings, store: Store, run_id: str = "") -> pd
     if prices.empty:
         add("Fraîcheur des cours", "error", "aucun historique de cours")
     else:
-        last = prices.groupby("symbol")["date"].max()
+        # cours quotidiens = sociétés suivies uniquement (l'univers élargi n'a que la capitalisation historique) ;
+        # les anciens tickers encore présents en silver ne sont pas signalés
+        tracked = set(settings.tickers)
+        last = prices[prices["symbol"].isin(tracked)].groupby("symbol")["date"].max() if tracked else \
+            prices.groupby("symbol")["date"].max()
         limit = pd.Timestamp.now().normalize() - pd.Timedelta(days=5)
         stale = last[last < limit].index.tolist()
-        add("Fraîcheur des cours", "ok" if not stale else "warn",
-            f"dernière séance : {last.max():%Y-%m-%d}"
-            + (f" — en retard : {', '.join(stale[:15])}" if stale else ""))
+        if last.empty:
+            add("Fraîcheur des cours", "warn", "aucun cours pour les sociétés suivies")
+        else:
+            add("Fraîcheur des cours", "ok" if not stale else "warn",
+                f"dernière séance : {last.max():%Y-%m-%d}"
+                + (f" — en retard : {', '.join(stale[:15])}" if stale else ""))
 
     # 4. Unicité des clés silver
     dup_tables = []
